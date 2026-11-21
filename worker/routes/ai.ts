@@ -161,3 +161,53 @@ ai.post("/chats/:id/messages", async (c) => {
     return c.json({ error: "AI_PROVIDER_ERROR", code: "AI_PROVIDER_ERROR", message: (e as Error).message.slice(0, 240) }, 502);
   }
 });
+
+
+/** Shared Telegram bot chat path. The bot and Mini App use the same per-user conversation history and daily quota. */
+export async function replyToTelegram(env: AppEnv["Bindings"], userId: number, content: string): Promise<string> {
+  const stamp = now();
+  const day = dayKey();
+  const plan = await env.DB.prepare(
+    `SELECT p.code,p.daily_requests,p.context_messages,p.max_output_tokens
+     FROM ai_user_plans s JOIN ai_plans p ON p.code=s.plan_code
+     WHERE s.user_id=?1 AND s.status='active' AND (s.ends_at IS NULL OR s.ends_at>?2) AND p.enabled=1
+     ORDER BY s.starts_at DESC LIMIT 1`,
+  ).bind(userId, stamp).first<PlanRow>() ?? await env.DB.prepare("SELECT code,daily_requests,context_messages,max_output_tokens FROM ai_plans WHERE code='free' AND enabled=1").first<PlanRow>() ?? {code:"free",daily_requests:20,context_messages:12,max_output_tokens:1200};
+  await env.DB.prepare("INSERT OR IGNORE INTO ai_usage(user_id,day) VALUES(?1,?2)").bind(userId,day).run();
+  const count = await env.DB.prepare("SELECT requests FROM ai_usage WHERE user_id=?1 AND day=?2").bind(userId,day).first<{requests:number}>();
+  if ((count?.requests ?? 0) >= plan.daily_requests) return "You have reached your daily AI message limit. Open the Mini App and check your Plans page to see available upgrades.";
+  let chat = await env.DB.prepare("SELECT id,model FROM ai_chats WHERE user_id=?1 AND archived=0 AND updated_at>?2 ORDER BY updated_at DESC LIMIT 1")
+    .bind(userId,stamp-86400).first<{id:string;model:string}>();
+  if (!chat) {
+    const id = crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO ai_chats(id,user_id,title,created_at,updated_at) VALUES(?1,?2,'Telegram chat',?3,?3)").bind(id,userId,stamp).run();
+    chat = {id,model:""};
+  }
+  const providers = (await env.DB.prepare("SELECT * FROM ai_providers WHERE enabled=1 ORDER BY priority,id").all<ProviderRow>()).results;
+  if (!providers.length) return "The AI assistant is not configured yet. Please ask the administrator to add an AI provider.";
+  const provider = providers.find((p)=>modelsOf(p).includes(chat!.model)) ?? providers.find((p)=>modelsOf(p).length>0);
+  if (!provider) return "No enabled AI model is available right now. Please contact the administrator.";
+  const model = modelsOf(provider).includes(chat.model) ? chat.model : modelsOf(provider)[0];
+  const previous = await env.DB.prepare("SELECT role,content FROM ai_messages WHERE chat_id=?1 AND user_id=?2 AND status='complete' ORDER BY id DESC LIMIT ?3")
+    .bind(chat.id,userId,Math.max(2,Math.min(100,plan.context_messages))).all<{role:string;content:string}>();
+  const messages = [...previous.results.reverse(),{role:"user",content:content.slice(0,12000)}].filter((m)=>m.role==="user"||m.role==="assistant");
+  await env.DB.prepare("INSERT INTO ai_messages(chat_id,user_id,role,content,created_at) VALUES(?1,?2,'user',?3,?4)").bind(chat.id,userId,content.slice(0,12000),stamp).run();
+  try {
+    const endpoint = new URL(provider.base_url.replace(/\/+$/,"")+"/chat/completions");
+    const response = await fetch(endpoint.toString(),{method:"POST",headers:{authorization:"Bearer "+provider.api_key,"content-type":"application/json"},body:JSON.stringify({model,messages,max_tokens:plan.max_output_tokens,temperature:0.7}),signal:AbortSignal.timeout(55000)});
+    const payload:any=await response.json().catch(()=>null);
+    if(!response.ok)throw new Error("Provider returned "+response.status);
+    const answer=payload?.choices?.[0]?.message?.content;
+    if(typeof answer!=="string"||!answer.trim())throw new Error("Empty AI response");
+    const inputTokens=Number(payload?.usage?.prompt_tokens)||Math.ceil(messages.reduce((n,m)=>n+m.content.length,0)/4);
+    const outputTokens=Number(payload?.usage?.completion_tokens)||Math.ceil(answer.length/4);
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO ai_messages(chat_id,user_id,role,content,input_tokens,output_tokens,created_at) VALUES(?1,?2,'assistant',?3,?4,?5,?6)").bind(chat.id,userId,answer,inputTokens,outputTokens,now()),
+      env.DB.prepare("UPDATE ai_usage SET requests=requests+1,input_tokens=input_tokens+?1,output_tokens=output_tokens+?2 WHERE user_id=?3 AND day=?4").bind(inputTokens,outputTokens,userId,day),
+      env.DB.prepare("UPDATE ai_chats SET model=?1,provider_id=?2,updated_at=?3,title=CASE WHEN title IN ('New chat','Telegram chat') THEN ?4 ELSE title END WHERE id=?5").bind(model,provider.id,now(),safeTitle(content.slice(0,56)),chat.id),
+    ]);
+    return answer.length>3900?answer.slice(0,3890)+"\n\n[Message shortened. Open the Mini App to read the full reply.]":answer;
+  } catch(e) {
+    return "Sorry, the AI provider is temporarily unavailable. Please try again in a moment.";
+  }
+}
