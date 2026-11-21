@@ -51,7 +51,8 @@ export function AdminAiManagement() {
     try{await api("/admin/ai/coupons",{method:"POST",body:{code:couponCode,discount_type:discountType,discount_value:Number(discountValue),plan_code:couponPlan||null,max_uses:maxUses?Number(maxUses):null,starts_at:couponStart?Math.floor(new Date(couponStart).getTime()/1000):null,expires_at:couponExpiry?Math.floor(new Date(couponExpiry).getTime()/1000):null}});setCouponCode("");setCouponStart("");setCouponExpiry("");await load();}
     catch(e:any){setError(e?.code||"Coupon could not be created")}
   };
-  const testProvider=async(id:number)=>{try{const r=await api<any>("/admin/ai/providers/"+id+"/test",{method:"POST",body:{}});alert(r.ok?"Provider connected · "+r.model:"Provider test failed");}catch(e:any){setError(e?.error||e?.code||"Provider test failed")}};\n  const toggleProvider=async(p:Provider)=>{
+  const testProvider=async(id:number)=>{try{const r=await api<any>("/admin/ai/providers/"+id+"/test",{method:"POST",body:{}});alert(r.ok?"Provider connected · "+r.model:"Provider test failed");}catch(e:any){setError(e?.error||e?.code||"Provider test failed")}};
+  const toggleProvider=async(p:Provider)=>{
     try{await api("/admin/ai/providers/"+p.id,{method:"PUT",body:{enabled:!p.enabled}});await load();}
     catch(e:any){setError(e?.code||"Provider update failed")}
   };
@@ -59,7 +60,12 @@ export function AdminAiManagement() {
     if(!confirm("Delete this AI provider?"))return;
     try{await api("/admin/ai/providers/"+id,{method:"DELETE"});await load()}catch(e:any){setError(e?.code||"Delete failed")}
   };
-  const assign=async()=>{\n    const id=Number(assignUser);if(!Number.isSafeInteger(id)||id<=0)return;\n    try{await api("/admin/ai/users/"+id+"/plan",{method:"POST",body:{planCode:assignPlan,days:Number(assignDays)||30}});setError("");alert("AI plan assigned successfully.");}\n    catch(e:any){setError(e?.code||"Plan assignment failed")}\n  };\n  const deleteCoupon=async(id:number)=>{
+  const assign=async()=>{
+    const id=Number(assignUser);if(!Number.isSafeInteger(id)||id<=0)return;
+    try{await api("/admin/ai/users/"+id+"/plan",{method:"POST",body:{planCode:assignPlan,days:Number(assignDays)||30}});setError("");alert("AI plan assigned successfully.");}
+    catch(e:any){setError(e?.code||"Plan assignment failed")}
+  };
+  const deleteCoupon=async(id:number)=>{
     if(!confirm("Delete this AI plan coupon?"))return;
     try{await api("/admin/ai/coupons/"+id,{method:"DELETE"});await load()}catch(e:any){setError(e?.code||"Delete failed")}
   };
