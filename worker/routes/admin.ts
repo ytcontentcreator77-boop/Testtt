@@ -21,9 +21,11 @@ import { brandName } from "../brand";
 import { type AppEnv, err, readBody } from "./app";
 import { providers } from "./providers";
 import { startAnnouncementBroadcast } from "../broadcast";
+import { aiAdmin } from "./ai-admin";
 
 export const admin = new Hono<AppEnv>();
 admin.route("/", providers);
+admin.route("/", aiAdmin);
 
 admin.use("*", async (c, next) => {
   if (!isOwner(c.env, c.get("settings"), c.get("user").id)) return err(c, 403, "FORBIDDEN");
