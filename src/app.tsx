@@ -14,6 +14,7 @@ import { ChannelGate } from "./screens/ChannelGate";
 import { Invite } from "./screens/Invite";
 import { Profile } from "./screens/Profile";
 import { Developer } from "./screens/Developer";
+import { HowToUse } from "./screens/HowToUse";
 import { KeyShop, KeyProduct, BuyKey, KeyDelivered, MyKeys, KeyWallet, KeyFunds, UpiAutoPayment } from "./screens/KeyStore";
 import { LazyAdminRoutes, LazyPublicPages } from "./lazy";
 
@@ -114,6 +115,7 @@ export function App() {
     else if (route.path === "/upi-auto-payment") screen = <UpiAutoPayment />;
     else if (route.path === "/profile") screen = <Profile />;
     else if (route.path === "/developer") screen = <Developer />;
+    else if (route.path === "/how-to-use") screen = <HowToUse />;
     else if (route.path === "/invite") screen = <Invite />;
     else if (a === "admin" && me.isAdmin) screen = <LazyAdminRoutes parts={route.parts.slice(1)} query={route.query} />;
     else screen = <KeyShop />;
