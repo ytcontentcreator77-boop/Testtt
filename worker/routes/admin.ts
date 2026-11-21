@@ -110,6 +110,7 @@ const EDITABLE: (keyof Settings)[] = [
   "min_topup_stars",
   "max_topup_stars",
   "support_username",
+  "howto_title", "howto_description", "howto_youtube_url", "howto_tiktok_url", "howto_video_url", "howto_fallback_url",
   "channel_url",
   "channel_id",
   "channel_gate",
@@ -169,6 +170,10 @@ admin.put("/settings", async (c) => {
   if (!Number.isInteger(minTopup) || minTopup < 1) return bad("min_topup_stars");
   if (!Number.isInteger(maxTopup) || maxTopup < minTopup || maxTopup > MAX_STARS_PER_PAYMENT) return bad("max_topup_stars");
   if (values.support_username) values.support_username = values.support_username.replace(/^@/, "");
+  for (const key of ["howto_youtube_url","howto_tiktok_url","howto_video_url","howto_fallback_url"] as const) {
+    const value = values[key];
+    if (value && (!/^https?:\/\//i.test(value) || value.length > 1000)) return err(c, 400, "INVALID_VALUE", { key });
+  }
   if (values.channel_url && !/^https:\/\/t\.me\//.test(values.channel_url)) return err(c, 400, "INVALID_VALUE", { key: "channel_url" });
   if (values.channel_id && !/^-100\d{5,}$/.test(values.channel_id)) return err(c, 400, "INVALID_VALUE", { key: "channel_id" });
   const badBrand = normalizeBrandSettings(values);
