@@ -1087,8 +1087,7 @@ admin.post("/backup/import", async (c) => {
   if (inputNames.some(n => !allowedNames.includes(n)) || (scope !== "full" && allowedNames.some(n => !inputNames.includes(n)))) return err(c,400,"BACKUP_SCOPE_MISMATCH");
   // Never let an empty or incomplete "full" file erase a live database.
   if (scope === "full" && (inputNames.length !== all.length || all.some(n => !inputNames.includes(n)))) return err(c,400,"FULL_BACKUP_INCOMPLETE");
-  const totalRows = inputNames.reduce((n,k)=>n+(Array.isArray(b.tables[k])?b.tables[k].length:1_000_000),0);
-  if (totalRows > 50000) return err(c,413,"BACKUP_TOO_LARGE",{maxRows:50000});
+  const totalRows = inputNames.reduce((n,k)=>n+b.tables[k].length,0);
   const columns = new Map<string,string[]>();
   for (const name of inputNames) {
     if (!all.includes(name)) return err(c,400,"UNKNOWN_BACKUP_TABLE",{table:name});
@@ -1096,7 +1095,7 @@ admin.post("/backup/import", async (c) => {
     const info = await c.env.DB.prepare("PRAGMA table_info(" + quoteTable(name) + ")").all<{name:string}>();
     columns.set(name,info.results.map(x=>x.name));
     for (const row of b.tables[name]) {
-      if (!row || typeof row !== "object" || Array.isArray(row) || Object.keys(row).some(k=>!columns.get(name)!.includes(k))) return err(c,400,"INVALID_BACKUP_ROW",{table:name});
+      if (!row || typeof row !== "object" || Array.isArray(row) || Object.keys(row).some(k=>!columns.get(name)!.includes(k)) || columns.get(name)!.some(k=>!Object.prototype.hasOwnProperty.call(row,k))) return err(c,400,"INVALID_BACKUP_ROW",{table:name});
     }
   }
   const replaceNames = scope === "full" ? all : scope === "key-catalog" ? ["key_categories","key_platforms"] : [];
