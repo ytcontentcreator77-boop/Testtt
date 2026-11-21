@@ -1159,7 +1159,7 @@ admin.put("/campaigns/:id",async(c)=>{
  const title=String(b.title??old.title).trim(),description=String(b.description??old.description),type=b.type??old.type,reward=Number(b.reward_inr??old.reward_inr),channels=b.channels??JSON.parse(old.channels_json||"[]"),active=b.active===undefined?old.active:(b.active?1:0);
  if(!title||!["channel","manual"].includes(type)||!Number.isFinite(reward)||reward<0||reward>100000||!Array.isArray(channels)||channels.length>20)return err(c,400,"INVALID_CAMPAIGN");
  await c.env.DB.prepare("UPDATE campaigns SET title=?2,description=?3,type=?4,reward_inr=?5,channels_json=?6,active=?7,updated_at=?8 WHERE id=?1").bind(id,title.slice(0,160),description.slice(0,2000),type,reward,JSON.stringify(channels),active,Math.floor(Date.now()/1000)).run();
- if(active&&!old.active)await c.env.DB.prepare("INSERT OR IGNORE INTO campaign_notice_queue(campaign_id,user_id) SELECT ?1,id FROM users WHERE can_message=1 AND banned=0").bind(id).run();
+ if(active&&!old.active)await c.env.DB.prepare("INSERT INTO campaign_notice_queue(campaign_id,user_id) SELECT ?1,id FROM users WHERE can_message=1 AND banned=0 ON CONFLICT(campaign_id,user_id) DO UPDATE SET status='pending',attempts=0").bind(id).run();
  return c.json({ok:true});
 });
 admin.delete("/campaigns/:id",async(c)=>{
@@ -1168,7 +1168,7 @@ admin.delete("/campaigns/:id",async(c)=>{
 });
 admin.get("/campaigns/:id/submissions",async(c)=>{
  const id=Number(c.req.param("id"));if(!Number.isSafeInteger(id)||id<1)return err(c,400,"INVALID_CAMPAIGN");
- const {results}=await c.env.DB.prepare("SELECT s.id,s.user_id,s.screenshot_data,s.screenshot_mime,s.status,s.created_at,u.first_name,u.username FROM campaign_submissions s LEFT JOIN users u ON u.id=s.user_id WHERE s.campaign_id=?1 ORDER BY s.id DESC LIMIT 100").bind(id).all<any>();
+ const {results}=await c.env.DB.prepare("SELECT s.id,s.user_id,s.screenshot_data,s.screenshot_mime,s.status,s.created_at,u.first_name,u.username FROM campaign_submissions s LEFT JOIN users u ON u.id=s.user_id WHERE s.campaign_id=?1 ORDER BY s.id DESC LIMIT 10").bind(id).all<any>();
  return c.json({items:results.map((x:any)=>({...x,screenshot:"data:"+x.screenshot_mime+";base64,"+x.screenshot_data,screenshot_data:undefined}))});
 });
 admin.post("/campaign-submissions/:id/review",async(c)=>{
