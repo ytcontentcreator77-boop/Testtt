@@ -275,11 +275,11 @@ async function handle(env: Env, u: any): Promise<void> {
   }
   if (cmd === "history") {
     const chats=await env.DB.prepare("SELECT title,updated_at FROM ai_chats WHERE user_id=?1 AND archived=0 ORDER BY updated_at DESC LIMIT 8").bind(from.id).all<{title:string;updated_at:number}>();
-    return void(await send(chats.results.length?"🗂 <b>Your recent AI chats</b>\\n\\n"+chats.results.map((x,i)=>`${i+1}. ${String(x.title).replace(/[<>&]/g,"")} · ${new Date(x.updated_at*1000).toLocaleDateString()}`).join("\\n"):"No saved conversations yet. Start chatting and your history will appear here."));
+    return void(await send(chats.results.length?"🗂 <b>Your recent AI chats</b>\n\n"+chats.results.map((x,i)=>`${i+1}. ${String(x.title).replace(/[<>&]/g,"")} · ${new Date(x.updated_at*1000).toLocaleDateString()}`).join("\n"):"No saved conversations yet. Start chatting and your history will appear here."));
   }
   if (cmd === "plans") {
     const s=await getSettings(env);const open=openButton(lang,s,"/#/plans");
-    return void(await send("💎 <b>AI plans</b>\\nCompare Free, Pro and Premium limits in the Mini App.",open?{inline_keyboard:[[open]]}:undefined));
+    return void(await send("💎 <b>AI plans</b>\nCompare Free, Pro and Premium limits in the Mini App.",open?{inline_keyboard:[[open]]}:undefined));
   }
   if (cmd === "ai" || cmd === "ask") {
     const question=text.replace(/^\/\w+\s*/,"").trim();
