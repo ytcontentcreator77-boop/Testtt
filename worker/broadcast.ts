@@ -56,6 +56,28 @@ import { emojiFallbacks, tg } from "./telegram";
 
 export { BROADCAST_BATCH, isBlocked, readBroadcast };
 
+/** Starts a normal queued broadcast using an announcement's content and optional external CTA. */
+export async function startAnnouncementBroadcast(env: Env, adminId: number, announcement: { title: string; description: string; imageUrl: string | null; buttonText: string; buttonEnabled: boolean; buttonUrl: string | null }): Promise<{ total: number }> {
+  const settings = await getSettings(env, { fresh: true });
+  if (readBroadcast(settings.broadcast_state)) throw new Error("BROADCAST_RUNNING");
+  const total = await audience(env);
+  if (!total) throw new Error("NO_AUDIENCE");
+  const text = [announcement.title.trim(), announcement.description.trim()].filter(Boolean).join("\\n\\n");
+  const content = announcement.imageUrl
+    ? { kind: "photo" as const, file: announcement.imageUrl, text: text.slice(0, 1024), entities: [] }
+    : { kind: "text" as const, text: text.slice(0, 4096), entities: [] };
+  const buttons = announcement.buttonEnabled && announcement.buttonUrl
+    ? [{ t: announcement.buttonText.trim().slice(0, 64) || "Open", u: announcement.buttonUrl, s: "primary" as const }]
+    : [];
+  const state: BroadcastState = { chat: adminId, c: content, b: buttons, two: false, app: false, cursor: 0, total, sent: 0, blocked: 0, failed: 0, startedAt: now() };
+  const result = await env.DB.prepare("INSERT INTO settings (key, value) VALUES ('broadcast_state', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE settings.value = ''")
+    .bind(JSON.stringify(state)).run();
+  bustSettings();
+  if (!(result.meta.changes > 0)) throw new Error("BROADCAST_RUNNING");
+  return { total };
+}
+
+
 // ---------------------------------------------------------------------------------------------------------------
 // Telegram helpers
 
