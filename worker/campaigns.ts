@@ -4,7 +4,7 @@ import { tg } from "./telegram";
 /** Send campaign notices in small batches so a large user base never blocks campaign creation. */
 export async function campaignNoticeTick(env: Env): Promise<void> {
   const { results } = await env.DB.prepare(
-    "SELECT q.id,q.user_id,c.id AS campaign_id,c.title,c.description,c.reward_inr FROM campaign_notice_queue q JOIN campaigns c ON c.id=q.campaign_id WHERE q.status='pending' AND c.active=1 ORDER BY q.id LIMIT 20",
+    "SELECT q.id,q.user_id,q.attempts,c.id AS campaign_id,c.title,c.description,c.reward_inr FROM campaign_notice_queue q JOIN campaigns c ON c.id=q.campaign_id WHERE q.status='pending' AND c.active=1 ORDER BY q.id LIMIT 20",
   ).all<any>();
   for (const row of results) {
     try {
