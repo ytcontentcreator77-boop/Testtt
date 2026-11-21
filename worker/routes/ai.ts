@@ -67,10 +67,15 @@ ai.post("/plans/:code/purchase", async (c) => {
   const userId = c.get("user").id;
   const stamp = now();
   const statements:any[] = [];
-  if (coupon) statements.push(c.env.DB.prepare("UPDATE ai_plan_coupons SET used_count=used_count+1 WHERE id=?1 AND active=1 AND (max_uses IS NULL OR used_count<max_uses) AND (expires_at IS NULL OR expires_at>?2) AND (starts_at IS NULL OR starts_at<=?2) AND NOT EXISTS(SELECT 1 FROM ai_coupon_redemptions WHERE coupon_id=?1 AND user_id=?3)").bind(coupon.id,stamp,userId));
-  statements.push(c.env.DB.prepare("UPDATE users SET balance_inr=balance_inr-?1 WHERE id=?2 AND balance_inr>=?1 AND (?3=0 OR changes()=1)").bind(amountInr,userId,coupon?1:0));
+  statements.push(c.env.DB.prepare(`UPDATE users SET balance_inr=balance_inr-?1
+    WHERE id=?2 AND balance_inr>=?1
+    AND (?3=0 OR EXISTS(SELECT 1 FROM ai_plan_coupons WHERE id=?4 AND active=1
+      AND (max_uses IS NULL OR used_count<max_uses) AND (expires_at IS NULL OR expires_at>?5)
+      AND (starts_at IS NULL OR starts_at<=?5) AND (plan_code IS NULL OR plan_code=?6)
+      AND NOT EXISTS(SELECT 1 FROM ai_coupon_redemptions WHERE coupon_id=?4 AND user_id=?2)))`)
+    .bind(amountInr,userId,coupon?1:0,coupon?.id??0,stamp,code));
+  if (coupon) statements.push(c.env.DB.prepare("UPDATE ai_plan_coupons SET used_count=used_count+1 WHERE id=?1 AND changes()=1").bind(coupon.id));
   statements.push(c.env.DB.prepare("INSERT INTO inr_ledger(user_id,delta_inr,kind,ref,note,created_at) SELECT ?1,?2,'ai_plan',?3,?4,?5 WHERE changes()=1").bind(userId,-amountInr,plan.id,"AI plan: "+plan.name,stamp));
-  statements.push(c.env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active' AND changes()=1").bind(userId));
   statements.push(c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE changes()=1").bind(userId,code,stamp,stamp+30*86400));
   if (coupon) statements.push(c.env.DB.prepare("INSERT INTO ai_coupon_redemptions(coupon_id,user_id,plan_code,discount_cents,redeemed_at) SELECT ?1,?2,?3,?4,?5 WHERE changes()=1").bind(coupon.id,userId,code,discount,stamp));
   const results = await c.env.DB.batch(statements);
