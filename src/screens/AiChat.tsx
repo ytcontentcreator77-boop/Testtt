@@ -168,7 +168,7 @@ export function AiPlans() {
   const buy=async(planCode:string)=>{
     if(planCode.toLowerCase()==="pro"){
       if(!supportUsername){setError("Admin support is not configured. Please contact the bot administrator.");return;}
-      const message=`Hello, I want to purchase the Pro AI plan.${coupon?.planCode===planCode && code.trim()?` Coupon: ${code.trim()}.`:""} Please help me activate it. My Telegram user ID: ${(await api<any>("/me")).id}.`;
+      const message=`Hello, I want to purchase the Pro AI plan.${coupon?.planCode===planCode && code.trim()?` Coupon: ${code.trim()}.`:""} Please help me activate it.`;
       openTelegramLink(`https://t.me/${supportUsername}?text=${encodeURIComponent(message)}`);
       setResult("Your Pro plan request is ready in the admin chat. Send the message to complete your purchase.");
       return;
