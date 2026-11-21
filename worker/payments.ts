@@ -128,7 +128,7 @@ export async function onSuccessfulPayment(
     const statements = [
       env.DB.prepare("UPDATE ai_star_payments SET status='paid',charge_id=?2,paid_at=?3 WHERE id=?1 AND status='pending'").bind(p.id,sp.telegram_payment_charge_id,stamp),
       env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active' AND EXISTS(SELECT 1 FROM ai_star_payments WHERE id=?2 AND status='paid')").bind(p.user_id,p.id),
-      env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE EXISTS(SELECT 1 FROM ai_star_payments WHERE id=?5 AND status='paid') AND NOT EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?1 AND plan_code=?2 AND created_at=?3)").bind(p.user_id,p.plan_code,stamp,stamp+30*86400,p.id),
+      env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE EXISTS(SELECT 1 FROM ai_star_payments WHERE id=?5 AND status='paid') AND NOT EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?1 AND plan_code=?2 AND created_at=?3)").bind(p.user_id,p.plan_code,stamp,p.duration_days===0?null:stamp+Number(p.duration_days||30)*86400,p.id),
     ];
     if (coupon) {
       statements.push(env.DB.prepare("UPDATE ai_plan_coupons SET used_count=used_count+1 WHERE id=?1 AND EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?2 AND plan_code=?3 AND created_at=?4)").bind(coupon.id,p.user_id,p.plan_code,stamp));
