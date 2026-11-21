@@ -159,6 +159,18 @@ async function meView(c: C, background?: (p: Promise<unknown>) => void): Promise
   };
 }
 
+app.get("/how-to-use", (c) => {
+  const s = c.get("settings");
+  return c.json({
+    howto_title: s.howto_title,
+    howto_description: s.howto_description,
+    howto_youtube_url: s.howto_youtube_url,
+    howto_tiktok_url: s.howto_tiktok_url,
+    howto_video_url: s.howto_video_url,
+    howto_fallback_url: s.howto_fallback_url
+  });
+});
+
 app.get("/developer/profile", async (c) => {
   const developerId = 7062424671;
   const developer = await c.env.DB.prepare(
