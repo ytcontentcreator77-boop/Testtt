@@ -1116,7 +1116,6 @@ admin.post("/backup/import", async (c) => {
   } else {
     // User-only imports merge by Telegram ID and do not delete accounts absent from the file.
     const name = "users";
-    const cols = columns.get(name)!;
     for (const row of b.tables.users as Record<string,unknown>[]) {
       if (!Number.isSafeInteger(Number(row.id))) return err(c,400,"INVALID_USER_ROW");
       const keys = Object.keys(row);
