@@ -154,20 +154,32 @@ export function AiHistory() {
 export function AiPlans() {
   const [plans,setPlans]=useState<any[]>([]);
   const [current,setCurrent]=useState("free");
+  const [wallet,setWallet]=useState(0);
   const [code,setCode]=useState("");
   const [coupon,setCoupon]=useState<any>(null);
   const [error,setError]=useState("");
-  useEffect(()=>{api<any>("/ai/plans").then(r=>{setPlans(r.items??[]);setCurrent(r.current??"free")}).catch(e=>setError(e?.code||"Unable to load plans"));},[]);
+  const [busy,setBusy]=useState("");
+  const [result,setResult]=useState("");
+  useEffect(()=>{api<any>("/ai/plans").then(r=>{setPlans(r.items??[]);setCurrent(r.current??"free");setWallet(Number(r.walletBalanceInr??0))}).catch(e=>setError(e?.code||"Unable to load plans"));},[]);
   const validate=async(planCode:string)=>{if(!code.trim())return;try{const r=await api<any>("/ai/coupons/validate",{method:"POST",body:{code,planCode}});setCoupon(r);setError("")}catch(e:any){setCoupon(null);setError(e?.code||"Coupon is not valid")}};
-  return <main class="ai-page"><BackNav to="/"/><header class="ai-page-head"><span>MEMBERSHIP</span><h1>Choose your AI plan</h1><p>More daily messages, longer context and larger responses.</p></header>
-    <div class="ai-coupon-entry"><input value={code} onInput={(e)=>{setCode((e.currentTarget as HTMLInputElement).value.toUpperCase());setCoupon(null)}} placeholder="Have a plan coupon?"/><span>Apply it on a plan below</span></div>
-    {plans.map((p)=><article class="ai-plan-card"><div class="ai-plan-head"><div><span>{p.code.toUpperCase()}</span><h2>{p.name}</h2></div><strong>{p.price_cents===0?"Free":`$${(p.price_cents/100).toFixed(2)}`}<small>/ month</small></strong></div>
+  const buy=async(planCode:string)=>{
+    if(busy)return;setBusy(planCode);setError("");setResult("");
+    try{const r=await api<any>("/ai/plans/"+encodeURIComponent(planCode)+"/purchase",{method:"POST",body:{couponCode:coupon?.planCode===planCode?code:""}});setWallet(Number(r.balanceInr??wallet));setCurrent(planCode);setCoupon(null);setResult("Plan activated successfully. Charged ₹"+Number(r.chargedInr??0).toFixed(2)+".");setCode("");}
+    catch(e:any){setError(e?.code==="INSUFFICIENT_WALLET_BALANCE"?"Insufficient wallet balance. Add funds, then try again.":e?.code||"Plan purchase failed");}
+    finally{setBusy("")}
+  };
+  return <main class="ai-page"><BackNav to="/"/><header class="ai-page-head"><span>MEMBERSHIP</span><h1>Choose your AI plan</h1><p>More daily messages, longer context and larger responses. Plans renew for 30 days when activated.</p></header>
+    <div class="ai-wallet-balance"><span>WALLET BALANCE</span><b>₹{wallet.toFixed(2)}</b><a href="#/funds">Add funds</a></div>
+    <div class="ai-coupon-entry"><input value={code} onInput={(e)=>{setCode((e.currentTarget as HTMLInputElement).value.toUpperCase());setCoupon(null)}} placeholder="Have a plan coupon?"/><span>Apply it on the plan you want to activate.</span></div>
+    {plans.map((p)=><article class="ai-plan-card"><div class="ai-plan-head"><div><span>{p.code.toUpperCase()}</span><h2>{p.name}</h2></div><strong>{p.price_cents===0?"Free":`$${(p.price_cents/100).toFixed(2)}`}<small>/ 30 days</small></strong></div>
       <ul><li>{p.daily_requests.toLocaleString()} messages per day</li><li>{p.context_messages} messages of conversation context</li><li>Up to {p.max_output_tokens.toLocaleString()} output tokens</li></ul>
-      {coupon?.planCode===p.code?<div class="ai-discount">Coupon applied · Save $${(coupon.discountCents/100).toFixed(2)} · Total $${(coupon.finalCents/100).toFixed(2)}</div>:null}
-      <button onClick={()=>validate(p.code)} disabled={!code.trim()}>Apply coupon</button>
-      {current===p.code?<small class="ai-current-plan">Your current plan</small>:null}
+      <div class="ai-plan-inr">Wallet price: ₹{Number(p.priceInr??0).toFixed(2)}</div>
+      {coupon?.planCode===p.code?<div class="ai-discount">Coupon applied · Save $${(coupon.discountCents/100).toFixed(2)} · New price $${(coupon.finalCents/100).toFixed(2)}</div>:null}
+      <div class="ai-plan-actions"><button class="ai-plan-coupon" onClick={()=>validate(p.code)} disabled={!code.trim()}>Apply coupon</button><button class="ai-plan-buy" onClick={()=>void buy(p.code)} disabled={!!busy}>{busy===p.code?"Activating…":current===p.code?"Activate again":"Activate plan"}</button></div>
+      {current===p.code?<small class="ai-current-plan">Current plan</small>:null}
     </article>)}
+    {result?<p class="ai-success">{result}</p>:null}
     {error?<p class="ai-error">{error}</p>:null}
-    <p class="ai-muted">Plan prices and limits are managed by the administrator. Subscription checkout can be connected to the configured payment methods.</p>
+    <p class="ai-muted">AI plan prices are shown in USD and charged from your INR wallet using the admin-configured exchange rate.</p>
   </main>;
 }
