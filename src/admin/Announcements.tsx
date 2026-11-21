@@ -1,6 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../api";
-import { navigate } from "../router";
 import { BackNav, Screen, LargeTitle, Section, toast, errText } from "../ui";
 
 type Announcement = { id:number; title:string; description:string; image_url:string|null; button_text:string; button_enabled:number; button_url:string|null; active:number; created_at:number };
@@ -21,7 +20,7 @@ export function AdminAnnouncements() {
   const broadcast=async(id:number)=>{if(!confirm("Send this announcement to all users who can receive bot messages?"))return;setBusy(true);try{const r=await api<{total:number}>("/admin/announcements/"+id+"/broadcast",{method:"POST",body:{}});toast("Broadcast queued for "+r.total+" users","ok");}catch(e){toast(errText(e),"error");}setBusy(false);};
   const remove=async(id:number)=>{if(!confirm("Delete this announcement?"))return;try{await api("/admin/announcements/"+id,{method:"DELETE"});load();toast("Announcement deleted","ok");}catch(e){toast(errText(e),"error");}};
   const toggle=async(x:Announcement)=>{try{await api("/admin/announcements/"+x.id,{method:"PUT",body:{title:x.title,description:x.description,image_url:x.image_url,button_text:x.button_text,button_enabled:!!x.button_enabled,button_url:x.button_url,active:!x.active}});load();}catch(e){toast(errText(e),"error");}};
-  const inputStyle={width:"100%",boxSizing:"border-box" as const,padding:"12px",borderRadius:"12px",border:"1px solid var(--line)",background:"var(--card)",color:"var(--text)",font:"inherit",marginTop:"6px"};
+  const inputStyle={width:"100%",boxSizing:"border-box" as const,padding:"12px",borderRadius:"12px",border:"1px solid var(--line)",background:"var(--card)",color:"var(--ink)",font:"inherit",marginTop:"6px"};
   return <><BackNav to="/admin"/><Screen bottom="native"><LargeTitle size="title" title="Announcements" sub="Create floating Mini App announcements and broadcast them to Telegram users."/>
     <div class="card pad" style={{display:"grid",gap:"13px"}}>
       <b>{editing?"Edit announcement":"Create announcement"}</b>
