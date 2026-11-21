@@ -5,7 +5,7 @@ import { tg } from "../telegram";
 export const ai = new Hono<AppEnv>();
 
 type ProviderRow = { id: number; name: string; base_url: string; api_key: string; models_json: string; enabled: number; priority: number };
-type PlanRow = { code: string; name: string; daily_requests: number; context_messages: number; max_output_tokens: number };
+type PlanRow = { code: string; name: string; daily_requests: number; context_messages: number; max_output_tokens: number; duration_days:number };
 
 const now = () => Math.floor(Date.now() / 1000);
 const dayKey = () => new Date().toISOString().slice(0, 10);
@@ -14,13 +14,13 @@ const safeTitle = (s: string) => s.trim().replace(/\s+/g, " ").slice(0, 64) || "
 async function activePlan(c: any): Promise<PlanRow> {
   const userId = c.get("user").id;
   const sub = await c.env.DB.prepare(
-    `SELECT p.code,p.name,p.daily_requests,p.context_messages,p.max_output_tokens
+    `SELECT p.code,p.name,p.daily_requests,p.context_messages,p.max_output_tokens,p.duration_days
      FROM ai_user_plans s JOIN ai_plans p ON p.code=s.plan_code
      WHERE s.user_id=?1 AND s.status='active' AND (s.ends_at IS NULL OR s.ends_at>?2) AND p.enabled=1
      ORDER BY s.starts_at DESC,s.id DESC LIMIT 1`,
   ).bind(userId, now()).first() as PlanRow | null;
   if (sub) return sub;
-  const free = await c.env.DB.prepare("SELECT code,name,daily_requests,context_messages,max_output_tokens FROM ai_plans WHERE code='free' AND enabled=1").first() as PlanRow | null;
+  const free = await c.env.DB.prepare("SELECT code,name,daily_requests,context_messages,max_output_tokens,duration_days FROM ai_plans WHERE code='free' AND enabled=1").first() as PlanRow | null;
   return free ?? { code: "free", name: "Free", daily_requests: 20, context_messages: 12, max_output_tokens: 1200 };
 }
 
@@ -79,7 +79,7 @@ ai.post("/plans/:code/purchase", async (c) => {
   if (coupon) statements.push(c.env.DB.prepare("UPDATE ai_plan_coupons SET used_count=used_count+1 WHERE id=?1 AND changes()=1").bind(coupon.id));
   statements.push(c.env.DB.prepare("INSERT INTO inr_ledger(user_id,delta_inr,kind,ref,note,created_at) SELECT ?1,?2,'ai_plan',?3,?4,?5 WHERE changes()=1").bind(userId,-amountInr,plan.id,"AI plan: "+plan.name,stamp));
   statements.push(c.env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active' AND EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?1 AND kind='ai_plan' AND created_at=?2 AND ref=?3)").bind(userId,stamp,plan.id));
-  statements.push(c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?1 AND kind='ai_plan' AND created_at=?3 AND ref=?5)").bind(userId,code,stamp,stamp+30*86400,plan.id));
+  statements.push(c.env.DB.prepare("undefined").bind(userId,code,stamp,plan.duration_days===0?null:stamp+Number(plan.duration_days||30)*86400,plan.id));
   if (coupon) statements.push(c.env.DB.prepare("INSERT INTO ai_coupon_redemptions(coupon_id,user_id,plan_code,discount_cents,redeemed_at) SELECT ?1,?2,?3,?4,?5 WHERE EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?2 AND plan_code=?3 AND created_at=?5) AND EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?2 AND kind='ai_plan' AND created_at=?5 AND ref=(SELECT id FROM ai_plans WHERE code=?3))").bind(coupon.id,userId,code,discount,stamp));
   const results = await c.env.DB.batch(statements);
   const walletUpdate = results[0];
@@ -89,7 +89,7 @@ ai.post("/plans/:code/purchase", async (c) => {
     return c.json({ error:"COUPON_INVALID_OR_EXPIRED",code:"COUPON_INVALID_OR_EXPIRED" },400);
   }
   const user = await c.env.DB.prepare("SELECT balance_inr FROM users WHERE id=?1").bind(userId).first<{balance_inr:number}>();
-  return c.json({ ok:true, plan:code, expiresAt:stamp+30*86400, chargedInr:amountInr, discountCents:discount, balanceInr:Number(user?.balance_inr??0) });
+  return c.json({ ok:true, plan:code, expiresAt:plan.duration_days===0?null:stamp+Number(plan.duration_days||30)*86400, chargedInr:amountInr, discountCents:discount, balanceInr:Number(user?.balance_inr??0) });
 });
 
 
@@ -111,11 +111,11 @@ ai.post("/plans/:code/stars-invoice", async (c) => {
   const finalCents=Math.max(0,Number(plan.price_cents)-discount);
   const stars=Math.max(1,Math.ceil((finalCents/100)*Number(c.get("settings").stars_per_usd||100)));
   const userId=c.get("user").id,stamp=now();
-  const row=await c.env.DB.prepare("INSERT INTO ai_star_payments(user_id,plan_code,stars,coupon_code,discount_cents,status,created_at) VALUES(?1,?2,?3,?4,?5,'pending',?6) RETURNING id")
-    .bind(userId,code,stars,couponCode||null,discount,stamp).first<{id:number}>();
+  const row=await c.env.DB.prepare("INSERT INTO ai_star_payments(user_id,plan_code,stars,coupon_code,discount_cents,duration_days,status,created_at) VALUES(?1,?2,?3,?4,?5,?6,'pending',?7) RETURNING id")
+    .bind(userId,code,stars,couponCode||null,discount,Number(plan.duration_days||30),stamp).first<{id:number}>();
   if(!row) return c.json({error:"PAYMENT_CREATE_FAILED",code:"PAYMENT_CREATE_FAILED"},500);
   try{
-    const link=await tg<string>(c.env.BOT_TOKEN,"createInvoiceLink",{title:("AI "+plan.name).slice(0,32),description:("30-day "+plan.name+" AI subscription").slice(0,255),payload:"aip"+row.id,currency:"XTR",prices:[{label:plan.name+" AI plan",amount:stars}]});
+    const link=await tg<string>(c.env.BOT_TOKEN,"createInvoiceLink",{title:("AI "+plan.name).slice(0,32),description:((Number(plan.duration_days)===0?"Unlimited duration":Number(plan.duration_days)+"-day")+" "+plan.name+" AI subscription").slice(0,255),payload:"aip"+row.id,currency:"XTR",prices:[{label:plan.name+" AI plan",amount:stars}]});
     return c.json({url:link,stars,paymentId:row.id});
   }catch(e){
     await c.env.DB.prepare("UPDATE ai_star_payments SET status='failed' WHERE id=?1 AND status='pending'").bind(row.id).run();
@@ -124,7 +124,7 @@ ai.post("/plans/:code/stars-invoice", async (c) => {
 });
 
 ai.get("/plans", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT code,name,price_cents,currency,daily_requests,context_messages,max_output_tokens,enabled,sort FROM ai_plans WHERE enabled=1 ORDER BY sort,id").all();
+  const { results } = await c.env.DB.prepare("SELECT code,name,price_cents,currency,daily_requests,context_messages,max_output_tokens,duration_days,enabled,sort FROM ai_plans WHERE enabled=1 ORDER BY sort,id").all();
   const rate = Number(c.get("settings").inr_per_usd || 90);
   return c.json({ items: results.map((p:any)=>({...p,priceInr:Math.round((p.price_cents/100)*rate*100)/100})), current: (await activePlan(c)).code, walletBalanceInr: Number(c.get("user").balance_inr ?? 0), inrPerUsd: rate });
 });
