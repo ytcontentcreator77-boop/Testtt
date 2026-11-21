@@ -86,3 +86,16 @@ aiAdmin.post("/ai/users/:id/plan", async (c) => {
   ]);
   return c.json({ok:true,userId,planCode:b.planCode,endsAt:stamp+days*86400});
 });
+
+aiAdmin.post("/ai/providers/:id/test", async (c) => {
+  const p = await c.env.DB.prepare("SELECT id,name,base_url,api_key,models_json FROM ai_providers WHERE id=?1 AND enabled=1").bind(Number(c.req.param("id"))).first<any>();
+  if (!p) return c.json({error:"PROVIDER_NOT_FOUND",code:"PROVIDER_NOT_FOUND"},404);
+  let models:string[]=[];try{const x=JSON.parse(p.models_json);if(Array.isArray(x))models=x.filter((v:unknown)=>typeof v==="string")}catch{}
+  if(!models.length)return c.json({error:"MODEL_NOT_CONFIGURED",code:"MODEL_NOT_CONFIGURED"},400);
+  try {
+    const response=await fetch(p.base_url.replace(/\/+$/,"")+"/chat/completions",{method:"POST",headers:{authorization:"Bearer "+p.api_key,"content-type":"application/json"},body:JSON.stringify({model:models[0],messages:[{role:"user",content:"Reply with OK"}],max_tokens:8}),signal:AbortSignal.timeout(18000)});
+    const data:any=await response.json().catch(()=>null);
+    if(!response.ok)return c.json({ok:false,error:String(data?.error?.message||"Provider returned "+response.status).slice(0,220)},502);
+    return c.json({ok:true,provider:p.name,model:models[0]});
+  } catch(e) { return c.json({ok:false,error:String((e as Error).message).slice(0,220)},502); }
+});
