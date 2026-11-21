@@ -48,7 +48,7 @@ export function botAboutAll(brand: string): Record<string, BotAbout> {
   for (const l of Object.keys(EXTRA)) {
     if (out[l]) continue;
     out[l] = {
-      name: fit(LIMIT.name, (b) => `${b} - Key Store 🔑`, brand),
+      name: fit(LIMIT.name, (b) => `${b} - AI Assistant 🤖`, brand),
       short: "AI chat assistant with saved conversations, multiple models and flexible plans.",
       description: fit(LIMIT.description, (b) => `🤖 ${b} AI Assistant\n\n💬 Ask questions and get AI answers\n🧠 Saved conversation history\n⚙️ Multiple AI models and providers\n💎 Free, Pro and Premium plans\n👇 Tap Start to chat with AI`, brand),
     };
