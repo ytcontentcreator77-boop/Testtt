@@ -174,7 +174,7 @@ export function AiPlans() {
     {plans.map((p)=><article class="ai-plan-card"><div class="ai-plan-head"><div><span>{p.code.toUpperCase()}</span><h2>{p.name}</h2></div><strong>{p.price_cents===0?"Free":`$${(p.price_cents/100).toFixed(2)}`}<small>/ 30 days</small></strong></div>
       <ul><li>{p.daily_requests.toLocaleString()} messages per day</li><li>{p.context_messages} messages of conversation context</li><li>Up to {p.max_output_tokens.toLocaleString()} output tokens</li></ul>
       <div class="ai-plan-inr">Wallet price: ₹{Number(p.priceInr??0).toFixed(2)}</div>
-      {coupon?.planCode===p.code?<div class="ai-discount">Coupon applied · Save $${(coupon.discountCents/100).toFixed(2)} · New price $${(coupon.finalCents/100).toFixed(2)}</div>:null}
+      {coupon?.planCode===p.code?<div class="ai-discount">Coupon applied · Save ${(coupon.discountCents/100).toFixed(2)} · New price ${(coupon.finalCents/100).toFixed(2)}</div>:null}
       <div class="ai-plan-actions"><button class="ai-plan-coupon" onClick={()=>validate(p.code)} disabled={!code.trim()}>Apply coupon</button><button class="ai-plan-buy" onClick={()=>void buy(p.code)} disabled={!!busy}>{busy===p.code?"Activating…":current===p.code?"Activate again":"Activate plan"}</button></div>
       {current===p.code?<small class="ai-current-plan">Current plan</small>:null}
     </article>)}
