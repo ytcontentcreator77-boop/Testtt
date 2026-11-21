@@ -282,7 +282,7 @@ async function handle(env: Env, u: any): Promise<void> {
     return void(await send("💎 <b>AI plans</b>\\nCompare Free, Pro and Premium limits in the Mini App.",open?{inline_keyboard:[[open]]}:undefined));
   }
   if (cmd === "ai" || cmd === "ask") {
-    const question=text.replace(/^\\/\\w+\\s*/,"").trim();
+    const question=text.replace(/^\/\w+\s*/,"").trim();
     if(!question)return void(await send("Send a question after the command, for example: <code>/ask Explain quantum computing</code>."));
     const answer=await replyToTelegram(env,from.id,question);
     return void(await tg(env.BOT_TOKEN,"sendMessage",{chat_id:from.id,text:answer,link_preview_options:{is_disabled:true}}));
