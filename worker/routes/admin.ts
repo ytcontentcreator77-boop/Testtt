@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { platformName } from "../../shared/platforms";
 import { MONEY_SUMS_SQL, parsePeriod, periodStart, totalsFrom, type MoneySums, type ReportPeriod } from "../../shared/profit";
-import { balanceStars, MAX_STARS_PER_PAYMENT, shownStars, starsCredit } from "../../shared/stars";
+import { MAX_STARS_PER_PAYMENT, shownStars, starsCredit } from "../../shared/stars";
 import { LANGS, pickLang, type Lang } from "../../shared/types";
 import { LIMITS } from "../../shared/brand";
 import { checkImageUpload, deleteAssetStmts, detectImageMime, isAssetKind, putAssetStmts } from "../assets";
@@ -21,9 +21,11 @@ import { brandName } from "../brand";
 import { type AppEnv, err, readBody } from "./app";
 import { providers } from "./providers";
 import { startAnnouncementBroadcast } from "../broadcast";
+import { aiAdmin } from "./ai-admin";
 
 export const admin = new Hono<AppEnv>();
 admin.route("/", providers);
+admin.route("/", aiAdmin);
 
 admin.use("*", async (c, next) => {
   if (!isOwner(c.env, c.get("settings"), c.get("user").id)) return err(c, 403, "FORBIDDEN");
@@ -816,7 +818,7 @@ admin.post("/connect", async (c) => {
 
 admin.post("/bot-texts/:batch", async (c) => c.json({ next: await syncBotTexts(c.env, Number(c.req.param("batch")) || 0) }));
 
-admin.get("/key-api",(c)=>({apiUrl:c.get("settings").reseller_api_url,configured:!!c.get("settings").reseller_api_key,masked:c.get("settings").reseller_api_key?"••••••••":""}));
+admin.get("/key-api",(c)=>c.json({apiUrl:c.get("settings").reseller_api_url,configured:!!c.get("settings").reseller_api_key,masked:c.get("settings").reseller_api_key?"••••••••":""}));
 admin.put("/key-api",async(c)=>{const b=await readBody<{apiUrl?:string;apiKey?:string;masterKey?:string}>(c);if(!b)return err(c,400,"INVALID_BODY");const v:Partial<Settings>={};if(b.apiUrl!==undefined){if(!/^https:\/\//.test(b.apiUrl))return err(c,400,"INVALID_URL");v.reseller_api_url=b.apiUrl.slice(0,300);}if(b.apiKey!==undefined)v.reseller_api_key=b.apiKey.slice(0,500);if(b.masterKey!==undefined)v.reseller_master_key=b.masterKey.slice(0,500);await setSettings(c.env,v);return c.json({ok:true,configured:!!(v.reseller_api_key??c.get("settings").reseller_api_key)});});
 
 // ---- Key store administration ----
@@ -1116,7 +1118,6 @@ admin.post("/backup/import", async (c) => {
     for (let i=0;i<statements.length;i+=100) await c.env.DB.batch(statements.slice(i,i+100));
   } else {
     // User-only imports merge by Telegram ID and do not delete accounts absent from the file.
-    const name = "users";
     for (const row of b.tables.users as Record<string,unknown>[]) {
       if (!Number.isSafeInteger(Number(row.id))) return err(c,400,"INVALID_USER_ROW");
       const keys = Object.keys(row);

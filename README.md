@@ -1,6 +1,22 @@
-# Amit Bot — Key Delivery Store
+# AI Assistant Bot + Telegram Mini App
 
-A Telegram bot + Telegram Mini App for selling game, software and platform access keys. The original Workpanel/Cloudflare architecture is retained, while the customer storefront and new order flow use the INR key-store database and wallet.
+A Telegram AI assistant with a persistent chat Mini App, conversation history, multiple OpenAI-compatible providers, admin-managed API credentials, Free/Pro/Premium plans, daily usage limits, wallet checkout and plan coupons. The existing key-store administration, payment methods, campaigns, announcements, broadcasts, bonus settings and legacy data remain in the repository and are not removed.
+
+## AI assistant features
+
+- Telegram text chat with saved conversations; `/new`, `/history`, `/plans` and `/ask` commands.
+- Mini App chat with model selection, saved history, rename/delete controls and daily usage display.
+- Multiple OpenAI-compatible providers and model lists configured in Admin → AI providers, plans & coupons. Provider API keys remain server-side and are masked in admin responses.
+- Free, Pro and Premium plan limits for daily requests, conversation context and maximum output tokens.
+- USD plan prices charged through the existing INR wallet using the configured INR-per-USD rate.
+- Percentage or fixed-USD-cent plan coupons, plan targeting, start/expiry dates, redemption caps and one redemption per user.
+- Admin controls to test providers, enable/disable providers, edit plan prices/limits and assign plans to Telegram users.
+
+## Existing admin features retained
+
+The previous admin system remains available, including key products/stock, reseller providers, payments, user management, wallet coupons, bonuses, referrals, branding, settings, payment methods, announcements, campaigns, backup/restore and broadcast tools. Existing key-store tables and data are not deleted.
+
+The legacy key-store customer screens and endpoints remain in the source for existing records and admin workflows; the default customer home and navigation now open the AI assistant.
 
 ## What is included
 

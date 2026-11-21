@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { platformName } from "../../shared/platforms";
 import type { OrderView } from "../../shared/types";
 import { api, ApiError, clearApiCache } from "../api";
-import { balanceStars, MAX_STARS_PER_PAYMENT, shownStars, starsCredit } from "../../shared/stars";
+import { MAX_STARS_PER_PAYMENT, shownStars, starsCredit } from "../../shared/stars";
 import type { MoneyTotals } from "../../shared/profit";
 import { dateTime, num, starsRate } from "../format";
 import { Icon, type IconName } from "../icons";
@@ -19,6 +19,7 @@ import { LEGEND, MoneyCells, MoneyTotalsBar, orderCells, rateCells, type Report 
 import { AdminsSection, type Owners } from "./Access";
 import { AdminAnnouncements } from "./Announcements";
 import { AdminCampaigns } from "./Campaigns";
+import { AdminAiManagement } from "./AiManagement";
 import {
   BackNav,
   BottomButtons,
@@ -74,6 +75,7 @@ export function AdminRoutes({ parts, query }: { parts: string[]; query: URLSearc
   if (a === "announcements") return <AdminAnnouncements />;
   if (a === "campaigns") return <AdminCampaigns />;
   if (a === "backup") return <AdminBackup />;
+  if (a === "ai") return <AdminAiManagement />;
   if (a === "messages") return <AdminMessages />;
   if (a === "icons") return <AdminIcons />;
   return <AdminHome />;
@@ -306,6 +308,7 @@ interface Overview {
 }
 
 const MANAGE: [string, IconName, string, string][] = [
+  ["AI providers, plans & coupons", "bot", "var(--sky)", "/admin/ai"],
   ["Key products & stock", "tag", "var(--lime)", "/admin/key-store"],
   ["Reseller API providers", "plug", "var(--sky)", "/admin/key-apis"],
   ["Manual payment approvals", "receipt", "var(--sky)", "/admin/manual-payments"],
@@ -343,6 +346,14 @@ function AdminHome() {
             href === "/admin/prices" ? <Num>{pct(o.defaultMarkup)}</Num> : href === "/admin/users" ? num(o.users) : href === "/admin/referrals" ? num(o.referralsJoined ?? 0) : href === "/admin/orders" && o.openOrders ? `${num(o.openOrders)} open` : undefined;
           return (
             <>
+              <div class="card pad svc-card rise">
+                <div class="head">
+                  <span class="tile md brand" aria-hidden="true"><Icon name="bot" size={20} stroke={1.8} /></span>
+                  <div><b class="t-headline">AI assistant</b><span class="t-footnote hint">Configure AI providers, API keys, plans, coupons and user access</span></div>
+                  <Chip tint label="Manage AI" onClick={() => navigate("/admin/ai")}>Open</Chip>
+                </div>
+              </div>
+
               <div class="card pad svc-card rise">
                 <div class="head">
                   <span class="tile md brand" aria-hidden="true"><Icon name="plug" size={20} stroke={1.8} /></span>

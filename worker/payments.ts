@@ -77,6 +77,21 @@ async function paymentFromPayload(env: Env, payload: string): Promise<PaymentRow
 
 /** Telegram asks us to confirm within 10 seconds. */
 export async function onPreCheckout(env: Env, q: { id: string; from: { id: number }; currency: string; total_amount: number; invoice_payload: string }) {
+  const aiMatch = /^aip(\d+)$/.exec(q.invoice_payload);
+  if (aiMatch) {
+    const p = await env.DB.prepare("SELECT * FROM ai_star_payments WHERE id=?1").bind(Number(aiMatch[1])).first<any>();
+    const now = Math.floor(Date.now() / 1000);
+    const valid = !!p && p.status === "pending" && p.user_id === q.from.id && q.currency === "XTR" && q.total_amount === p.stars && now - p.created_at < 3600;
+    const banned = valid ? !!(await env.DB.prepare("SELECT banned FROM users WHERE id=?1").bind(q.from.id).first<{banned:number}>())?.banned : false;
+    let couponValid = true;
+    if (valid && p.coupon_code) {
+      const coupon = await env.DB.prepare("SELECT * FROM ai_plan_coupons WHERE code=?1 COLLATE NOCASE AND active=1").bind(p.coupon_code).first<any>();
+      couponValid = !!coupon && (!coupon.plan_code || coupon.plan_code === p.plan_code) && (!coupon.starts_at || coupon.starts_at <= now) && (!coupon.expires_at || coupon.expires_at >= now) && (!coupon.max_uses || coupon.used_count < coupon.max_uses) && !await env.DB.prepare("SELECT 1 FROM ai_coupon_redemptions WHERE coupon_id=?1 AND user_id=?2").bind(coupon.id,q.from.id).first();
+    }
+    const ok = valid && !banned && couponValid;
+    await tg(env.BOT_TOKEN,"answerPreCheckoutQuery",{pre_checkout_query_id:q.id,ok,...(ok?{}:{error_message:banned?"Your account can't make payments.":couponValid?"This payment link has expired. Please create a new invoice.":"This coupon is no longer valid. Please create a new invoice without it."})});
+    return;
+  }
   const p = await paymentFromPayload(env, q.invoice_payload);
   const now = Math.floor(Date.now() / 1000);
   const valid =
@@ -99,6 +114,31 @@ export async function onSuccessfulPayment(
   from: { id: number; language_code?: string },
   sp: { invoice_payload: string; telegram_payment_charge_id: string; total_amount: number; currency: string },
 ): Promise<void> {
+  const aiMatch = /^aip(\d+)$/.exec(sp.invoice_payload);
+  if (aiMatch) {
+    const p = await env.DB.prepare("SELECT * FROM ai_star_payments WHERE id=?1").bind(Number(aiMatch[1])).first<any>();
+    if (!p || p.status !== "pending" || p.user_id !== from.id || sp.currency !== "XTR" || sp.total_amount !== p.stars) {
+      console.error("invalid AI plan Stars payment", sp.telegram_payment_charge_id);
+      return;
+    }
+    const stamp = Math.floor(Date.now()/1000);
+    const plan = await env.DB.prepare("SELECT id,name FROM ai_plans WHERE code=?1 AND enabled=1").bind(p.plan_code).first<any>();
+    if (!plan) return;
+    const coupon = p.coupon_code ? await env.DB.prepare("SELECT id FROM ai_plan_coupons WHERE code=?1 COLLATE NOCASE").bind(p.coupon_code).first<any>() : null;
+    const statements = [
+      env.DB.prepare("UPDATE ai_star_payments SET status='paid',charge_id=?2,paid_at=?3 WHERE id=?1 AND status='pending'").bind(p.id,sp.telegram_payment_charge_id,stamp),
+      env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active' AND EXISTS(SELECT 1 FROM ai_star_payments WHERE id=?2 AND status='paid')").bind(p.user_id,p.id),
+      env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE EXISTS(SELECT 1 FROM ai_star_payments WHERE id=?5 AND status='paid') AND NOT EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?1 AND plan_code=?2 AND created_at=?3)").bind(p.user_id,p.plan_code,stamp,p.duration_days===0?null:stamp+Number(p.duration_days||30)*86400,p.id),
+    ];
+    if (coupon) {
+      statements.push(env.DB.prepare("UPDATE ai_plan_coupons SET used_count=used_count+1 WHERE id=?1 AND EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?2 AND plan_code=?3 AND created_at=?4)").bind(coupon.id,p.user_id,p.plan_code,stamp));
+      statements.push(env.DB.prepare("INSERT INTO ai_coupon_redemptions(coupon_id,user_id,plan_code,discount_cents,redeemed_at) SELECT ?1,?2,?3,?4,?5 WHERE EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?2 AND plan_code=?3 AND created_at=?5)").bind(coupon.id,p.user_id,p.plan_code,p.discount_cents,stamp));
+    }
+    const [marked] = await env.DB.batch(statements);
+    if (!marked.meta.changes) return;
+    await tg(env.BOT_TOKEN,"sendMessage",{chat_id:p.user_id,text:"Your "+plan.name+" AI plan is now active for 30 days. Thank you for your purchase!"});
+    return;
+  }
   const p = await paymentFromPayload(env, sp.invoice_payload);
   if (!p) {
     console.error("payment without record", sp.telegram_payment_charge_id);

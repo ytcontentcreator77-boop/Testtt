@@ -14,14 +14,18 @@ import { getSettings, setSettings, type Settings } from "./settings";
 import { tg } from "./telegram";
 
 /** Bump when the command lists change, so every deployment refreshes its menus after updating */
-export const COMMANDS_VERSION = 7;
+export const COMMANDS_VERSION = 8;
 
 type Command = { command: string; description: string };
 
 export function userCommands(lang: Lang): Command[] {
   return [
     { command: "start", description: botPlain(lang, "cmdStart") },
-    { command: "keys", description: "My purchased keys" },
+    { command: "new", description: "Start a new AI conversation" },
+    { command: "history", description: "View recent AI conversations" },
+    { command: "plans", description: "View AI plans and limits" },
+    { command: "ask", description: "Ask the AI a question" },
+    { command: "keys", description: "Legacy key library" },
     { command: "wallet", description: botPlain(lang, "cmdWallet") },
     { command: "bonus", description: "Claim wallet bonus" },
     { command: "coupon", description: "Redeem wallet coupon" },

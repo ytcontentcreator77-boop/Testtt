@@ -21,8 +21,10 @@ import { ensureSchema } from "./migrate";
 import { cleanupRateLimits } from "./rateLimit";
 import { stockCheckTick, apiBalanceTick } from "./keyHealth";
 import { campaignNoticeTick } from "./campaigns";
+import { ai } from "./routes/ai";
 
 api.route("/admin", admin);
+api.route("/ai", ai);
 
 const app = new Hono<{ Bindings: Env }>();
 

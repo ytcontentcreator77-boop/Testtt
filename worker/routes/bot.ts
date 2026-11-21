@@ -14,6 +14,7 @@ import { onBroadcastCallback, onBroadcastCommand, onBroadcastMessage } from "../
 import { onPreCheckout, onSuccessfulPayment } from "../payments";
 import { verifyAutoUpi } from "../upi";
 import { tg } from "../telegram";
+import { replyToTelegram } from "./ai";
 
 export const bot = new Hono<{ Bindings: Env }>();
 
@@ -268,6 +269,24 @@ async function handle(env: Env, u: any): Promise<void> {
       await tg(env.BOT_TOKEN, "setMyCommands", { scope: { type: "chat", chat_id: from.id }, commands: [...userCommands(lang), ...ADMIN_COMMANDS] }).catch(() => undefined);
     return void (await (user?.lang ? sendWelcome(env, from.id, lang, from.first_name) : pickLanguage()));
   }
+  if (cmd === "new") {
+    await env.DB.prepare("UPDATE ai_chats SET archived=1,updated_at=?1 WHERE user_id=?2 AND archived=0").bind(now,from.id).run();
+    return void(await send("✨ A fresh conversation is ready. Send me a message to begin."));
+  }
+  if (cmd === "history") {
+    const chats=await env.DB.prepare("SELECT title,updated_at FROM ai_chats WHERE user_id=?1 AND archived=0 ORDER BY updated_at DESC LIMIT 8").bind(from.id).all<{title:string;updated_at:number}>();
+    return void(await send(chats.results.length?"🗂 <b>Your recent AI chats</b>\n\n"+chats.results.map((x,i)=>`${i+1}. ${String(x.title).replace(/[<>&]/g,"")} · ${new Date(x.updated_at*1000).toLocaleDateString()}`).join("\n"):"No saved conversations yet. Start chatting and your history will appear here."));
+  }
+  if (cmd === "plans") {
+    const s=await getSettings(env);const open=openButton(lang,s,"/#/plans");
+    return void(await send("💎 <b>AI plans</b>\nCompare Free, Pro and Premium limits in the Mini App.",open?{inline_keyboard:[[open]]}:undefined));
+  }
+  if (cmd === "ai" || cmd === "ask") {
+    const question=text.replace(/^\/\w+\s*/,"").trim();
+    if(!question)return void(await send("Send a question after the command, for example: <code>/ask Explain quantum computing</code>."));
+    const answer=await replyToTelegram(env,from.id,question);
+    return void(await tg(env.BOT_TOKEN,"sendMessage",{chat_id:from.id,text:answer,link_preview_options:{is_disabled:true}}));
+  }
   if (cmd === "orders" || cmd === "keys") {
     const {results}=await env.DB.prepare("SELECT id,product_name,plan_duration,delivered_key,price_inr,setup_file_url,platform FROM orders WHERE user_id=?1 AND delivered_key IS NOT NULL ORDER BY id DESC LIMIT 10").bind(from.id).all<any>();
     if(!results.length)return void(await send("🔑 You have no purchased keys yet. Open the store to browse products."));
@@ -308,5 +327,9 @@ async function handle(env: Env, u: any): Promise<void> {
   }
   // An admin's message that isn't a command is never answered with help: the broadcast menu may be waiting for it
   if (!cmd && isOwner(env, await getSettings(env), from.id)) return void (await onBroadcastMessage(env, from.id, m));
+  if (!cmd && text && !isOwner(env, await getSettings(env), from.id)) {
+    const answer = await replyToTelegram(env, from.id, text);
+    return void (await tg(env.BOT_TOKEN, "sendMessage", { chat_id: from.id, text: answer, link_preview_options: { is_disabled: true } }));
+  }
   await sendHelp(env, from.id, lang);
 }

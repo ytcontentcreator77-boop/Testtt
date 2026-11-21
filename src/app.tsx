@@ -17,7 +17,8 @@ import { Developer } from "./screens/Developer";
 import { HowToUse } from "./screens/HowToUse";
 import { AnnouncementPopup } from "./screens/AnnouncementPopup";
 import { Campaigns } from "./screens/Campaigns";
-import { KeyShop, KeyProduct, BuyKey, KeyDelivered, MyKeys, KeyWallet, KeyFunds, UpiAutoPayment } from "./screens/KeyStore";
+import { KeyProduct, BuyKey, KeyDelivered, MyKeys, KeyWallet, KeyFunds, UpiAutoPayment } from "./screens/KeyStore";
+import { AiChat, AiHistory, AiPlans } from "./screens/AiChat";
 import { LazyAdminRoutes, LazyPublicPages } from "./lazy";
 
 /** Deep links: t.me/<bot>?startapp=order_12 / s_2828 / wallet */
@@ -27,7 +28,9 @@ function routeFromStartParam(p: string | null): string | null {
   if (m) return `/key-delivered/${m[1]}`;
   m = /^s_(\d+)$/.exec(p);
   if (m) return `/`;
-  if (p === "wallet" || p === "orders" || p === "profile") return `/${p}`;
+  if (p === "wallet") return "/plans";
+  if (p === "orders") return "/history";
+  if (p === "profile") return "/profile";
   return null;
 }
 
@@ -37,7 +40,7 @@ export function applyStartRoute() {
   if (deep && (location.hash === "" || location.hash === "#/")) history.replaceState(history.state, "", "#" + deep);
 }
 
-const TAB_PATHS = new Set(["/", "/orders", "/wallet", "/profile"]);
+const TAB_PATHS = new Set(["/", "/history", "/plans", "/profile"]);
 
 /** Shown until /me answers: shaped like Home (hero card, search, platform grid). */
 function AppSkeleton() {
@@ -107,12 +110,14 @@ export function App() {
     const [a, b, c] = route.parts;
     key = route.path + "?" + route.query;
     tabs = TAB_PATHS.has(route.path);
-    if (route.path === "/") screen = <KeyShop />;
+    if (route.path === "/" || route.path === "/chat") screen = <AiChat />;
+    else if (route.path === "/history" || route.path === "/orders") screen = <AiHistory />;
+    else if (route.path === "/plans" || route.path === "/wallet") screen = <AiPlans />;
     else if (a === "products" && b) screen = <KeyProduct />;
     else if (a === "buy" && b && c) screen = <BuyKey />;
     else if (a === "key-delivered" && b) screen = <KeyDelivered />;
-    else if (route.path === "/keys" || route.path === "/orders") screen = <MyKeys />;
-    else if (route.path === "/key-wallet" || route.path === "/wallet") screen = <KeyWallet />;
+    else if (route.path === "/keys") screen = <MyKeys />;
+    else if (route.path === "/key-wallet") screen = <KeyWallet />;
     else if (route.path === "/funds") screen = <KeyFunds />;
     else if (route.path === "/upi-auto-payment") screen = <UpiAutoPayment />;
     else if (route.path === "/profile") screen = <Profile />;
@@ -121,7 +126,7 @@ export function App() {
     else if (route.path === "/invite") screen = <Invite />;
     else if (route.path === "/campaigns") screen = <Campaigns />;
     else if (a === "admin" && me.isAdmin) screen = <LazyAdminRoutes parts={route.parts.slice(1)} query={route.query} />;
-    else screen = <KeyShop />;
+    else screen = <AiChat />;
   }
 
   return (

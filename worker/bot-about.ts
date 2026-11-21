@@ -1,4 +1,4 @@
-// Bot profile name and descriptions for the Amit Bot key store.
+// Bot profile name and descriptions for the AI assistant.
 import { type Lang, LANGS } from "../shared/types";
 import extra from "./bot-about-extra.json";
 
@@ -28,9 +28,9 @@ export function botAboutFor(brand: string): Record<Lang, BotAbout> {
   const out = {} as Record<Lang, BotAbout>;
   for (const l of LANGS) {
     out[l] = {
-      name: fit(LIMIT.name, (b) => `${b} - Key Store 🔑`, brand),
-      short: "Instant game and software keys. Add wallet balance in INR, choose a plan and receive your key instantly.",
-      description: fit(LIMIT.description, (b) => `🔑 ${b} Key Store\n\n🎮 Game keys and software access\n📱 Android, iOS and PC products\n⚡ Instant key delivery from available stock\n💰 Add funds in INR (₹) using UPI and manual payment methods\n👛 Orders are paid securely from your wallet balance\n\n👇 Tap Start to browse products`, brand),
+      name: fit(LIMIT.name, (b) => `${b} - AI Assistant 🤖`, brand),
+      short: "Chat with AI models, save conversations, ask questions and explore Free, Pro and Premium plans.",
+      description: fit(LIMIT.description, (b) => `🤖 ${b} AI Assistant\n\n💬 Ask questions and get AI answers\n🧠 Saved conversation history\n⚙️ Multiple AI models and providers\n💎 Free, Pro and Premium plans\n📈 Daily usage limits and plan upgrades\n\n👇 Tap Start to chat with AI`, brand),
     };
   }
   return out;
@@ -48,9 +48,9 @@ export function botAboutAll(brand: string): Record<string, BotAbout> {
   for (const l of Object.keys(EXTRA)) {
     if (out[l]) continue;
     out[l] = {
-      name: fit(LIMIT.name, (b) => `${b} - Key Store 🔑`, brand),
-      short: "Instant game and software keys with INR wallet payments and fast delivery.",
-      description: fit(LIMIT.description, (b) => `🔑 ${b} Key Store\n\n🎮 Game and software keys\n⚡ Instant delivery\n💰 INR wallet top-ups with UPI and manual methods\n👇 Tap Start to browse products`, brand),
+      name: fit(LIMIT.name, (b) => `${b} - AI Assistant 🤖`, brand),
+      short: "AI chat assistant with saved conversations, multiple models and flexible plans.",
+      description: fit(LIMIT.description, (b) => `🤖 ${b} AI Assistant\n\n💬 Ask questions and get AI answers\n🧠 Saved conversation history\n⚙️ Multiple AI models and providers\n💎 Free, Pro and Premium plans\n👇 Tap Start to chat with AI`, brand),
     };
   }
   return out;
