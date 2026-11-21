@@ -48,7 +48,10 @@ export function AdminAiManagement() {
     try{await api("/admin/ai/providers",{method:"POST",body:{name,base_url:base,api_key:key,models:models.split(/[\n,]/).map(x=>x.trim()).filter(Boolean)}});setKey("");await load();}
     catch(e:any){setError(e?.code||"Provider could not be saved")}finally{setBusy(false)}
   };
-  const createPlan=async()=>{\n    try{await api("/admin/ai/plans",{method:"POST",body:{code:newPlanCode,name:newPlanName,price_cents:Number(newPlanPrice),daily_requests:Number(newPlanDaily),context_messages:Number(newPlanContext),max_output_tokens:Number(newPlanOutput)}});setNewPlanCode("");setNewPlanName("");await load()}catch(e:any){setError(e?.code||"Plan could not be created")}\n  };\n  const savePlan=async(p:Plan)=>{
+  const createPlan=async()=>{
+    try{await api("/admin/ai/plans",{method:"POST",body:{code:newPlanCode,name:newPlanName,price_cents:Number(newPlanPrice),daily_requests:Number(newPlanDaily),context_messages:Number(newPlanContext),max_output_tokens:Number(newPlanOutput)}});setNewPlanCode("");setNewPlanName("");await load()}catch(e:any){setError(e?.code||"Plan could not be created")}
+  };
+  const savePlan=async(p:Plan)=>{
     try{await api("/admin/ai/plans/"+encodeURIComponent(p.code),{method:"PUT",body:{name:p.name,price_cents:p.price_cents,daily_requests:p.daily_requests,context_messages:p.context_messages,max_output_tokens:p.max_output_tokens,enabled:!!p.enabled,sort:p.sort}});await load();}
     catch(e:any){setError(e?.code||"Plan save failed")}
   };
@@ -57,7 +60,14 @@ export function AdminAiManagement() {
     try{await api("/admin/ai/coupons",{method:"POST",body:{code:couponCode,discount_type:discountType,discount_value:Number(discountValue),plan_code:couponPlan||null,max_uses:maxUses?Number(maxUses):null,starts_at:couponStart?Math.floor(new Date(couponStart).getTime()/1000):null,expires_at:couponExpiry?Math.floor(new Date(couponExpiry).getTime()/1000):null}});setCouponCode("");setCouponStart("");setCouponExpiry("");await load();}
     catch(e:any){setError(e?.code||"Coupon could not be created")}
   };
-  const editProvider=async(p:Provider)=>{\n    const n=window.prompt("Provider name",p.name);if(n===null)return;\n    const b=window.prompt("API base URL",p.base_url);if(b===null)return;\n    const m=window.prompt("Models (comma-separated)",(p.models??[]).join(", "));if(m===null)return;\n    const k=window.prompt("New API key (leave blank to keep current)","");if(k===null)return;\n    try{await api("/admin/ai/providers/"+p.id,{method:"PUT",body:{name:n,base_url:b,models:m.split(",").map(x=>x.trim()).filter(Boolean),api_key:k}});await load()}catch(e:any){setError(e?.code||"Provider edit failed")}\n  };\n  const testProvider=async(id:number)=>{try{const r=await api<any>("/admin/ai/providers/"+id+"/test",{method:"POST",body:{}});alert(r.ok?"Provider connected · "+r.model:"Provider test failed");}catch(e:any){setError(e?.error||e?.code||"Provider test failed")}};
+  const editProvider=async(p:Provider)=>{
+    const n=window.prompt("Provider name",p.name);if(n===null)return;
+    const b=window.prompt("API base URL",p.base_url);if(b===null)return;
+    const m=window.prompt("Models (comma-separated)",(p.models??[]).join(", "));if(m===null)return;
+    const k=window.prompt("New API key (leave blank to keep current)","");if(k===null)return;
+    try{await api("/admin/ai/providers/"+p.id,{method:"PUT",body:{name:n,base_url:b,models:m.split(",").map(x=>x.trim()).filter(Boolean),api_key:k}});await load()}catch(e:any){setError(e?.code||"Provider edit failed")}
+  };
+  const testProvider=async(id:number)=>{try{const r=await api<any>("/admin/ai/providers/"+id+"/test",{method:"POST",body:{}});alert(r.ok?"Provider connected · "+r.model:"Provider test failed");}catch(e:any){setError(e?.error||e?.code||"Provider test failed")}};
   const toggleProvider=async(p:Provider)=>{
     try{await api("/admin/ai/providers/"+p.id,{method:"PUT",body:{enabled:!p.enabled}});await load();}
     catch(e:any){setError(e?.code||"Provider update failed")}
@@ -103,7 +113,8 @@ export function AdminAiManagement() {
         <button class="ai-admin-save" onClick={()=>void createPlan()}>＋ Create plan</button>
       </div>
       {plans.map(p=><article class="ai-admin-card ai-admin-grid">
-        <h3>{p.name} · {p.code}</h3>\n        <label class="ai-admin-field"><span>Plan enabled</span><input type="checkbox" checked={!!p.enabled} onChange={e=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,enabled:e.currentTarget.checked?1:0}:x))}/></label>
+        <h3>{p.name} · {p.code}</h3>
+        <label class="ai-admin-field"><span>Plan enabled</span><input type="checkbox" checked={!!p.enabled} onChange={e=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,enabled:e.currentTarget.checked?1:0}:x))}/></label>
         {field("Plan name",p.name,(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,name:v}:x)))}
         {field("Monthly price (USD cents)",String(p.price_cents),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,price_cents:Number(v)||0}:x)))}
         {field("Messages per day",String(p.daily_requests),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,daily_requests:Number(v)||1}:x)))}
