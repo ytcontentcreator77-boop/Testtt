@@ -79,3 +79,43 @@ export function AdminKeyApis(){const [items,I]=useState<any[]>([]),[active,A]=us
 export function AdminKeyOrders(){const [items,I]=useState<any[]>([]);const load=()=>call('/admin/key-orders').then(r=>I(r.items??[])).catch(()=>toast('Could not load key deliveries','error'));useEffect(()=>{void load()},[]);const refund=async(id:number)=>{if(!confirm('Refund this key order to the customer wallet?'))return;try{await call(`/admin/key-orders/${id}/refund`,'POST',{});toast('Refunded to wallet','ok');await load()}catch{toast('Refund could not be completed','error')}};return <Shell title="Key deliveries" sub="Review delivered keys and refund a purchase to the customer's INR wallet."><Section header="Recent key orders">{items.map(o=><div class="admin-extra-card"><div class="admin-extra-row"><b>#{o.id} · {o.product_name}</b><span>{o.status}</span></div><small>User {o.user_id} · {o.username?`@${o.username}`:o.first_name}</small><small>{o.plan_duration} · ₹{Number(o.price_inr).toFixed(2)} · {o.key_source} · {new Date(o.created_at*1000).toLocaleString()}</small>{o.expires_at?<small>Expires {new Date(o.expires_at*1000).toLocaleDateString()}</small>:null}{o.status==='completed'?<div class="admin-extra-tools"><button class="danger" onClick={()=>void refund(o.id)}>Refund to wallet</button></div>:null}</div>)}{!items.length?<p>No delivered keys yet.</p>:null}</Section></Shell>}
 
 export function AdminKeyOverview(){const [v,V]=useState<any>(null);useEffect(()=>{void call('/admin/key-overview').then(V).catch(()=>{})},[]);if(!v)return <Section header="Key-store performance"><p>Loading key-store metrics…</p></Section>;return <Section header="Key-store performance"><div class="admin-key-stats"><div><small>Today's revenue</small><b>₹{Number(v.today.revenue).toFixed(2)}</b><span>{v.today.orders} orders</span></div><div><small>Today's gross profit</small><b>₹{Number(v.today.profit).toFixed(2)}</b><span>API cost ₹{Number(v.today.apiCost).toFixed(2)}</span></div><div><small>7-day revenue</small><b>₹{Number(v.week.revenue).toFixed(2)}</b><span>{v.week.orders} orders</span></div><div><small>Available stock</small><b>{v.availableKeys}</b><span>keys ready to deliver</span></div><div><small>Pending payments</small><b>{v.pendingPayments}</b><span>₹{Number(v.pendingPaymentAmount).toFixed(2)} awaiting review</span></div><div><small>Wallet liability</small><b>₹{Number(v.walletLiability).toFixed(2)}</b><span>total customer balance</span></div></div></Section>}
+
+
+type BackupScope = "full" | "key-catalog" | "users";
+type BackupFile = { format:string; version:number; scope:BackupScope; exportedAt?:string; tables:Record<string,unknown[]> };
+export function AdminBackup(){
+ const [scope,S]=useState<BackupScope>("full"),[file,F]=useState<BackupFile|null>(null),[fileName,N]=useState(""),[busy,B]=useState(false);
+ const exportNow=async()=>{
+  B(true);
+  try{
+   const data=await call("/admin/backup/export?scope="+scope) as BackupFile;
+   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+   const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="hero-bot-"+scope+"-backup-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+   toast("Backup exported successfully","ok");
+  }catch{toast("Could not export backup","error")}
+  B(false);
+ };
+ const choose=async(e:Event)=>{
+  const input=e.currentTarget as HTMLInputElement;const picked=input.files?.[0];if(!picked){F(null);N("");return}
+  N(picked.name);try{const parsed=JSON.parse(await picked.text()) as BackupFile;if(parsed.format!=="hero-bot-backup"||parsed.version!==1||!parsed.tables||!["full","key-catalog","users"].includes(parsed.scope))throw new Error("Invalid backup");F(parsed);toast("Backup file ready to import","ok")}catch{F(null);toast("Invalid backup JSON file","error")}
+ };
+ const importNow=async()=>{
+  if(!file)return;
+  const warning=file.scope==="full"?"FULL RESTORE replaces all current database records, including users, orders, balances, keys, settings and API credentials. This cannot be undone. Continue?":file.scope==="key-catalog"?"This replaces all current key categories and key platforms. Continue?":"This merges imported users by Telegram ID and updates matching user records. Continue?";
+  if(!window.confirm(warning))return;
+  B(true);try{const r=await call("/admin/backup/import","POST",file);toast("Imported "+r.importedRows+" records from "+r.importedTables+" tables","ok");F(null);N("");const el=document.getElementById("admin-backup-file") as HTMLInputElement|null;if(el)el.value=""}catch(e){toast(e instanceof Error?e.message:"Backup import failed","error")}B(false);
+ };
+ const label=scope==="full"?"Full database":scope==="key-catalog"?"Key categories & platforms":"Users only";
+ return <Shell title="Backup & restore" sub="Export a backup or restore selected data directly from this admin panel.">
+  <Section header="Export backup">
+   <label>Backup type<select value={scope} onChange={e=>S((e.target as HTMLSelectElement).value as BackupScope)}><option value="full">Full database · all data</option><option value="key-catalog">Key categories & platforms only</option><option value="users">Users only</option></select></label>
+   <Notice tone="info">{scope==="full"?"Includes users, balances, orders, keys and stock, products, categories, platforms, payment records, settings and provider configuration.":scope==="key-catalog"?"Includes only key-store categories and platforms. Does not include products, plans or stock.":"Exports only user profiles and account fields."}</Notice>
+   <button class="admin-extra-primary" disabled={busy} onClick={()=>void exportNow()}>{busy?"Preparing…":"Export "+label}</button>
+  </Section>
+  <Section header="Import / restore">
+   <label>Choose backup JSON file<input id="admin-backup-file" type="file" accept=".json,application/json" onChange={e=>void choose(e)}/></label>
+   {file?<div class="admin-extra-card"><b>{fileName}</b><small>Type: {file.scope} · {Object.keys(file.tables).length} tables · {Object.values(file.tables).reduce((n,v)=>n+(Array.isArray(v)?v.length:0),0)} records</small><small>Created: {file.exportedAt??"Unknown date"}</small><button disabled={busy} onClick={()=>void importNow()}>{busy?"Importing…":"Import this backup"}</button></div>:<p>Select a valid backup file exported by this bot.</p>}
+   <Notice tone="warn">Full backups contain private data, including API keys and payment credentials. Store files securely. A full restore overwrites the current database; export a fresh backup first.</Notice>
+  </Section>
+ </Shell>
+}
