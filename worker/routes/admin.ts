@@ -20,6 +20,7 @@ import { tg } from "../telegram";
 import { brandName } from "../brand";
 import { type AppEnv, err, readBody } from "./app";
 import { providers } from "./providers";
+import { startAnnouncementBroadcast } from "../broadcast";
 
 export const admin = new Hono<AppEnv>();
 admin.route("/", providers);
@@ -979,3 +980,60 @@ admin.get("/key-overview",async(c)=>{const now=Math.floor(Date.now()/1000);const
  c.env.DB.prepare("SELECT COUNT(*) AS pending,COALESCE(SUM(amount_inr),0) AS amount FROM manual_payments WHERE status='pending'"),
  c.env.DB.prepare("SELECT COALESCE(SUM(balance_inr),0) AS liability FROM users"),
 ]);const t:any=today.results[0]||{},w:any=weekStats.results[0]||{};return c.json({today:{orders:Number(t.orders||0),revenue:Number(t.revenue||0),apiCost:Number(t.api_cost||0),profit:Number(t.revenue||0)-Number(t.api_cost||0),discounts:Number(t.discounts||0)},week:{orders:Number(w.orders||0),revenue:Number(w.revenue||0),apiCost:Number(w.api_cost||0),profit:Number(w.revenue||0)-Number(w.api_cost||0)},availableKeys:Number((stock.results[0] as any)?.available||0),pendingPayments:Number((payments.results[0] as any)?.pending||0),pendingPaymentAmount:Number((payments.results[0] as any)?.amount||0),walletLiability:Number((wallet.results[0] as any)?.liability||0)});});
+
+
+// ---- Announcements ----
+admin.get("/announcements", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT * FROM announcements ORDER BY id DESC LIMIT 50").all();
+  return c.json({ items: results });
+});
+admin.post("/announcements", async (c) => {
+  const b = await readBody<any>(c);
+  if (!b || !String(b.title ?? "").trim()) return err(c, 400, "TITLE_REQUIRED");
+  const title = String(b.title).trim().slice(0, 160);
+  const description = String(b.description ?? "").trim().slice(0, 3000);
+  const imageUrl = String(b.image_url ?? "").trim();
+  const buttonText = String(b.button_text ?? "Continue").trim().slice(0, 64) || "Continue";
+  const buttonEnabled = !!b.button_enabled;
+  const buttonUrl = String(b.button_url ?? "").trim();
+  if (imageUrl && !/^https?:\/\//i.test(imageUrl)) return err(c, 400, "INVALID_IMAGE_URL");
+  if (buttonEnabled && (!buttonUrl || !/^https?:\/\//i.test(buttonUrl))) return err(c, 400, "BUTTON_LINK_REQUIRED");
+  const now = Math.floor(Date.now() / 1000);
+  const row = await c.env.DB.prepare("INSERT INTO announcements(title,description,image_url,button_text,button_enabled,button_url,active,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?8) RETURNING *")
+    .bind(title, description, imageUrl || null, buttonText, buttonEnabled ? 1 : 0, buttonEnabled ? buttonUrl : null, b.active === false ? 0 : 1, now).first<any>();
+  let broadcast = null;
+  if (b.broadcast) {
+    try { broadcast = await startAnnouncementBroadcast(c.env, c.get("user").id, { title, description, imageUrl: imageUrl || null, buttonText, buttonEnabled, buttonUrl: buttonEnabled ? buttonUrl : null }); }
+    catch (e) { if ((e as Error).message === "BROADCAST_RUNNING") return err(c, 409, "BROADCAST_RUNNING", { announcementId: row.id }); if ((e as Error).message === "NO_AUDIENCE") return err(c, 409, "NO_AUDIENCE", { announcementId: row.id }); throw e; }
+  }
+  return c.json({ item: row, broadcast }, 201);
+});
+admin.put("/announcements/:id", async (c) => {
+  const b = await readBody<any>(c);
+  if (!b || !String(b.title ?? "").trim()) return err(c, 400, "TITLE_REQUIRED");
+  const imageUrl = String(b.image_url ?? "").trim();
+  const buttonEnabled = !!b.button_enabled;
+  const buttonUrl = String(b.button_url ?? "").trim();
+  if (imageUrl && !/^https?:\/\//i.test(imageUrl)) return err(c, 400, "INVALID_IMAGE_URL");
+  if (buttonEnabled && (!buttonUrl || !/^https?:\/\//i.test(buttonUrl))) return err(c, 400, "BUTTON_LINK_REQUIRED");
+  const result = await c.env.DB.prepare("UPDATE announcements SET title=?2,description=?3,image_url=?4,button_text=?5,button_enabled=?6,button_url=?7,active=?8,updated_at=?9 WHERE id=?1")
+    .bind(Number(c.req.param("id")), String(b.title).trim().slice(0,160), String(b.description??"").trim().slice(0,3000), imageUrl || null, String(b.button_text??"Continue").trim().slice(0,64)||"Continue", buttonEnabled?1:0, buttonEnabled?buttonUrl:null, b.active===false?0:1, Math.floor(Date.now()/1000)).run();
+  if (!result.meta.changes) return err(c, 404, "ANNOUNCEMENT_NOT_FOUND");
+  return c.json({ ok: true });
+});
+admin.delete("/announcements/:id", async (c) => {
+  await c.env.DB.prepare("DELETE FROM announcements WHERE id=?1").bind(Number(c.req.param("id"))).run();
+  return c.json({ ok: true });
+});
+admin.post("/announcements/:id/broadcast", async (c) => {
+  const a = await c.env.DB.prepare("SELECT * FROM announcements WHERE id=?1").bind(Number(c.req.param("id"))).first<any>();
+  if (!a) return err(c, 404, "ANNOUNCEMENT_NOT_FOUND");
+  try {
+    const result = await startAnnouncementBroadcast(c.env, c.get("user").id, { title:a.title, description:a.description, imageUrl:a.image_url, buttonText:a.button_text, buttonEnabled:!!a.button_enabled, buttonUrl:a.button_url });
+    return c.json({ ok:true, ...result });
+  } catch (e) {
+    if ((e as Error).message === "BROADCAST_RUNNING") return err(c,409,"BROADCAST_RUNNING");
+    if ((e as Error).message === "NO_AUDIENCE") return err(c,409,"NO_AUDIENCE");
+    throw e;
+  }
+});
