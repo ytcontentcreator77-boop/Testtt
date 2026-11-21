@@ -216,6 +216,7 @@ export function Profile() {
           />
         ) : null}
         <Row icon="chat" plate="var(--sky)" title={t("profile.support")} onClick={support} external />
+        <Row icon="code" plate="var(--lavender-strong)" title="Contact Developer" meta="@devheroo" href="/developer" />
         <Row icon="doc" plate="var(--lavender)" title={t("profile.terms")} onClick={() => (openExternalTerms() ? undefined : setSheet("terms"))} external={!!brand.termsUrl} />
       </List>
 
