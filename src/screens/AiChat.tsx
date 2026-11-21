@@ -3,6 +3,7 @@ import { api } from "../api";
 import { Icon } from "../icons";
 import { navigate, useRoute } from "../router";
 import { BackNav } from "../ui";
+import { openTelegramLink } from "../tg";
 import "./AiChat.css";
 
 type Model = { providerId: number; provider: string; model: string };
@@ -156,14 +157,22 @@ export function AiPlans() {
   const [plans,setPlans]=useState<any[]>([]);
   const [current,setCurrent]=useState("free");
   const [wallet,setWallet]=useState(0);
+  const [supportUsername,setSupportUsername]=useState("");
   const [code,setCode]=useState("");
   const [coupon,setCoupon]=useState<any>(null);
   const [error,setError]=useState("");
   const [busy,setBusy]=useState("");
   const [result,setResult]=useState("");
-  useEffect(()=>{api<any>("/ai/plans").then(r=>{setPlans(r.items??[]);setCurrent(r.current??"free");setWallet(Number(r.walletBalanceInr??0))}).catch(e=>setError(e?.code||"Unable to load plans"));},[]);
+  useEffect(()=>{Promise.all([api<any>("/ai/plans"),api<any>("/me")]).then(([r,me])=>{setPlans(r.items??[]);setCurrent(r.current??"free");setWallet(Number(r.walletBalanceInr??0));setSupportUsername(String(me.supportUsername??"").replace(/^@/,""))}).catch(e=>setError(e?.code||"Unable to load plans"));},[]);
   const validate=async(planCode:string)=>{if(!code.trim())return;try{const r=await api<any>("/ai/coupons/validate",{method:"POST",body:{code,planCode}});setCoupon(r);setError("")}catch(e:any){setCoupon(null);setError(e?.code||"Coupon is not valid")}};
   const buy=async(planCode:string)=>{
+    if(planCode.toLowerCase()==="pro"){
+      if(!supportUsername){setError("Admin support is not configured. Please contact the bot administrator.");return;}
+      const message=`Hello, I want to purchase the Pro AI plan.${coupon?.planCode===planCode && code.trim()?` Coupon: ${code.trim()}.`:""} Please help me activate it. My Telegram user ID: ${(await api<any>("/me")).id}.`;
+      openTelegramLink(`https://t.me/${supportUsername}?text=${encodeURIComponent(message)}`);
+      setResult("Your Pro plan request is ready in the admin chat. Send the message to complete your purchase.");
+      return;
+    }
     if(busy)return;setBusy(planCode);setError("");setResult("");
     try{const r=await api<any>("/ai/plans/"+encodeURIComponent(planCode)+"/purchase",{method:"POST",body:{couponCode:coupon?.planCode===planCode?code:""}});setWallet(Number(r.balanceInr??wallet));setCurrent(planCode);setCoupon(null);setResult("Plan activated successfully. Charged ₹"+Number(r.chargedInr??0).toFixed(2)+".");setCode("");}
     catch(e:any){setError(e?.code==="INSUFFICIENT_WALLET_BALANCE"?"Insufficient wallet balance. Add funds, then try again.":e?.code||"Plan purchase failed");}
@@ -176,11 +185,11 @@ export function AiPlans() {
       <ul><li>{p.daily_requests.toLocaleString()} messages per day</li><li>{p.context_messages} messages of conversation context</li><li>Up to {p.max_output_tokens.toLocaleString()} output tokens</li></ul>
       <div class="ai-plan-inr">Wallet price: ₹{Number(coupon?.planCode===p.code && p.price_cents ? p.priceInr*coupon.finalCents/p.price_cents : p.priceInr??0).toFixed(2)}</div>
       {coupon?.planCode===p.code?<div class="ai-discount">Coupon applied · Save ${(coupon.discountCents/100).toFixed(2)} · New price ${(coupon.finalCents/100).toFixed(2)}</div>:null}
-      <div class="ai-plan-actions"><button class="ai-plan-coupon" onClick={()=>validate(p.code)} disabled={!code.trim()}>Apply coupon</button><button class="ai-plan-buy" onClick={()=>void buy(p.code)} disabled={!!busy}>{busy===p.code?"Activating…":current===p.code?"Activate again":"Activate plan"}</button></div>
+      <div class="ai-plan-actions"><button class="ai-plan-coupon" onClick={()=>validate(p.code)} disabled={!code.trim()}>Apply coupon</button><button class="ai-plan-buy" onClick={()=>void buy(p.code)} disabled={!!busy}>{busy===p.code?"Activating…":p.code.toLowerCase()==="pro"?"Contact admin":current===p.code?"Activate again":"Activate plan"}</button></div>
       {current===p.code?<small class="ai-current-plan">Current plan</small>:null}
     </article>)}
     {result?<p class="ai-success">{result}</p>:null}
     {error?<p class="ai-error">{error}</p>:null}
-    <p class="ai-muted">AI plan prices are shown in USD and charged from your INR wallet using the admin-configured exchange rate.</p>
+    <p class="ai-muted">AI plan prices are shown in USD. Pro purchases are completed directly with the administrator; other plans use your INR wallet.</p>
   </main>;
 }
