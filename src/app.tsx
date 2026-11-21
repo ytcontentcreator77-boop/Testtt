@@ -15,6 +15,7 @@ import { Invite } from "./screens/Invite";
 import { Profile } from "./screens/Profile";
 import { Developer } from "./screens/Developer";
 import { HowToUse } from "./screens/HowToUse";
+import { AnnouncementPopup } from "./screens/AnnouncementPopup";
 import { KeyShop, KeyProduct, BuyKey, KeyDelivered, MyKeys, KeyWallet, KeyFunds, UpiAutoPayment } from "./screens/KeyStore";
 import { LazyAdminRoutes, LazyPublicPages } from "./lazy";
 
@@ -126,6 +127,7 @@ export function App() {
       <Fragment key={key}>{screen}</Fragment>
       {tabs ? <TabBar /> : null}
       <Toasts />
+      {me && me.langChosen && me.termsAccepted && !me.channelRequired && !outside && !error ? <AnnouncementPopup me={me} /> : null}
     </>
   );
 }
