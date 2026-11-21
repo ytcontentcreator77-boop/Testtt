@@ -18,6 +18,7 @@ import { balStars, money, starsText, usdStars } from "./fmt";
 import { LEGEND, MoneyCells, MoneyTotalsBar, orderCells, rateCells, type Report } from "./Money";
 import { AdminsSection, type Owners } from "./Access";
 import { AdminAnnouncements } from "./Announcements";
+import { AdminCampaigns } from "./Campaigns";
 import {
   BackNav,
   BottomButtons,
@@ -71,6 +72,7 @@ export function AdminRoutes({ parts, query }: { parts: string[]; query: URLSearc
   if (a === "currencies") return <AdminCurrencies />;
   if (a === "payment-methods") return <AdminPaymentMethods />;
   if (a === "announcements") return <AdminAnnouncements />;
+  if (a === "campaigns") return <AdminCampaigns />;
   if (a === "backup") return <AdminBackup />;
   if (a === "messages") return <AdminMessages />;
   if (a === "icons") return <AdminIcons />;
@@ -317,6 +319,7 @@ const MANAGE: [string, IconName, string, string][] = [
   ["Settings", "plug", "var(--lavender)", "/admin/settings"],
   ["Payment methods", "receipt", "var(--lavender)", "/admin/payment-methods"],
   ["Announcements", "chat", "var(--pink)", "/admin/announcements"],
+  ["Campaigns & rewards", "star", "var(--lime)", "/admin/campaigns"],
   ["Backup & restore", "plug", "var(--sky)", "/admin/backup"],
   ["Bot messages", "chat", "var(--sky)", "/admin/messages"],
 ];
