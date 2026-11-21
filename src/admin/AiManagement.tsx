@@ -4,7 +4,7 @@ import { navigate } from "../router";
 import { BackNav } from "../ui";
 
 type Provider = { id:number; name:string; base_url:string; api_key:string; models:string[]; enabled:number; priority:number };
-type Plan = { code:string; name:string; price_cents:number; daily_requests:number; context_messages:number; max_output_tokens:number; enabled:number; sort:number };
+type Plan = { code:string; name:string; price_cents:number; daily_requests:number; context_messages:number; max_output_tokens:number; duration_days:number; enabled:number; sort:number };
 type Coupon = { id:number; code:string; discount_type:string; discount_value:number; plan_code:string|null; max_uses:number|null; used_count:number; expires_at:number|null; active:number };
 
 const field = (label:string,value:string,onInput:(v:string)=>void,placeholder="") => <label class="ai-admin-field">{label}<input value={value} placeholder={placeholder} onInput={(e)=>onInput((e.currentTarget as HTMLInputElement).value)}/></label>;
@@ -26,13 +26,14 @@ export function AdminAiManagement() {
   const [maxUses,setMaxUses]=useState("");
   const [assignUser,setAssignUser]=useState("");
   const [assignPlan,setAssignPlan]=useState("pro");
-  const [assignDays,setAssignDays]=useState("30");
+  const [assignDays,setAssignDays]=useState("");
   const [newPlanCode,setNewPlanCode]=useState("");
   const [newPlanName,setNewPlanName]=useState("");
   const [newPlanPrice,setNewPlanPrice]=useState("499");
   const [newPlanDaily,setNewPlanDaily]=useState("100");
   const [newPlanContext,setNewPlanContext]=useState("20");
   const [newPlanOutput,setNewPlanOutput]=useState("2000");
+  const [newPlanDuration,setNewPlanDuration]=useState("30");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
@@ -49,10 +50,10 @@ export function AdminAiManagement() {
     catch(e:any){setError(e?.code||"Provider could not be saved")}finally{setBusy(false)}
   };
   const createPlan=async()=>{
-    try{await api("/admin/ai/plans",{method:"POST",body:{code:newPlanCode,name:newPlanName,price_cents:Number(newPlanPrice),daily_requests:Number(newPlanDaily),context_messages:Number(newPlanContext),max_output_tokens:Number(newPlanOutput)}});setNewPlanCode("");setNewPlanName("");await load()}catch(e:any){setError(e?.code||"Plan could not be created")}
+    try{await api("/admin/ai/plans",{method:"POST",body:{code:newPlanCode,name:newPlanName,price_cents:Number(newPlanPrice),daily_requests:Number(newPlanDaily),context_messages:Number(newPlanContext),max_output_tokens:Number(newPlanOutput),duration_days:Number(newPlanDuration)}});setNewPlanCode("");setNewPlanName("");setNewPlanDuration("30");await load()}catch(e:any){setError(e?.code||"Plan could not be created")}
   };
   const savePlan=async(p:Plan)=>{
-    try{await api("/admin/ai/plans/"+encodeURIComponent(p.code),{method:"PUT",body:{name:p.name,price_cents:p.price_cents,daily_requests:p.daily_requests,context_messages:p.context_messages,max_output_tokens:p.max_output_tokens,enabled:!!p.enabled,sort:p.sort}});await load();}
+    try{await api("/admin/ai/plans/"+encodeURIComponent(p.code),{method:"PUT",body:{name:p.name,price_cents:p.price_cents,daily_requests:p.daily_requests,context_messages:p.context_messages,max_output_tokens:p.max_output_tokens,duration_days:p.duration_days,enabled:!!p.enabled,sort:p.sort}});await load();}
     catch(e:any){setError(e?.code||"Plan save failed")}
   };
   const addCoupon=async()=>{
@@ -78,7 +79,7 @@ export function AdminAiManagement() {
   };
   const assign=async()=>{
     const id=Number(assignUser);if(!Number.isSafeInteger(id)||id<=0)return;
-    try{await api("/admin/ai/users/"+id+"/plan",{method:"POST",body:{planCode:assignPlan,days:Number(assignDays)||30}});setError("");alert("AI plan assigned successfully.");}
+    try{await api("/admin/ai/users/"+id+"/plan",{method:"POST",body:{planCode:assignPlan,...(assignDays.trim()?{days:Number(assignDays)}:{})}});setError("");alert("AI plan assigned successfully.");}
     catch(e:any){setError(e?.code||"Plan assignment failed")}
   };
   const deleteCoupon=async(id:number)=>{
@@ -101,7 +102,7 @@ export function AdminAiManagement() {
       {providers.map(p=><article class="ai-admin-card"><h3>{p.name} <small>#{p.id}</small></h3><p>{p.base_url}</p><p>Key: {p.api_key} · Models: {(p.models??[]).join(", ")}</p><button onClick={()=>void editProvider(p)}>Edit</button><button onClick={()=>void testProvider(p.id)}>Test connection</button><button onClick={()=>void toggleProvider(p)}>{p.enabled?"Disable":"Enable"}</button><button class="danger" onClick={()=>void deleteProvider(p.id)}>Delete</button></article>)}
       {!providers.length?<p class="ai-muted">No AI provider configured. Add at least one provider to enable chat replies.</p>:null}
     </section>
-    <section class="ai-admin-section"><h2>AI plans & usage limits</h2><p class="ai-muted">Set monthly USD prices, daily message quotas and context/output limits.</p>
+    <section class="ai-admin-section"><h2>AI plans & usage limits</h2><p class="ai-muted">Set monthly USD prices, daily message quotas, context/output limits and each plan’s duration.</p>
       <div class="ai-admin-card ai-admin-grid">
         <h3>Create a custom plan</h3>
         {field("Plan code (unique)",newPlanCode,setNewPlanCode,"business")}
@@ -110,6 +111,7 @@ export function AdminAiManagement() {
         {field("Messages per day",newPlanDaily,setNewPlanDaily,"100")}
         {field("Context messages",newPlanContext,setNewPlanContext,"20")}
         {field("Maximum output tokens",newPlanOutput,setNewPlanOutput,"2000")}
+        {field("Duration in days (0 = unlimited)",newPlanDuration,setNewPlanDuration,"30")}
         <button class="ai-admin-save" onClick={()=>void createPlan()}>＋ Create plan</button>
       </div>
       {plans.map(p=><article class="ai-admin-card ai-admin-grid">
@@ -120,6 +122,7 @@ export function AdminAiManagement() {
         {field("Messages per day",String(p.daily_requests),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,daily_requests:Number(v)||1}:x)))}
         {field("Context messages",String(p.context_messages),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,context_messages:Number(v)||2}:x)))}
         {field("Maximum output tokens",String(p.max_output_tokens),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,max_output_tokens:Number(v)||64}:x)))}
+        {field("Duration in days (0 = unlimited)",String(p.duration_days??30),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,duration_days:Math.max(0,Number(v)||0)}:x)))}
         <button class="ai-admin-save" onClick={()=>void savePlan(p)}>Save {p.name}</button>
       </article>)}
     </section>
@@ -127,7 +130,7 @@ export function AdminAiManagement() {
       <div class="ai-admin-card ai-admin-grid">
         {field("Telegram user ID",assignUser,setAssignUser,"123456789")}
         <label class="ai-admin-field">Plan<select value={assignPlan} onChange={e=>setAssignPlan((e.currentTarget as HTMLSelectElement).value)}>{plans.map(p=><option value={p.code}>{p.name}</option>)}</select></label>
-        {field("Duration in days",assignDays,setAssignDays,"30")}
+        {field("Duration override in days (blank = plan default; 0 = unlimited)",assignDays,setAssignDays,"Use configured plan duration")}
         <button class="ai-admin-save" onClick={()=>void assign()}>Assign plan</button>
       </div>
     </section>
