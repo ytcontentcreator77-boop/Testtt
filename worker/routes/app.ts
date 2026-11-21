@@ -591,6 +591,8 @@ app.post("/campaigns/:id/submit", async (c) => {
   if(!campaign)return err(c,404,"CAMPAIGN_NOT_FOUND");
   const m=/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(b.screenshot);
   if(!m||m[2].length>2_800_000)return err(c,400,"INVALID_SCREENSHOT");
+  const prior=await c.env.DB.prepare("SELECT status FROM campaign_submissions WHERE campaign_id=?1 AND user_id=?2").bind(id,uid).first<any>();
+  if(prior?.status==="approved")return err(c,409,"ALREADY_APPROVED");
   const now=Math.floor(Date.now()/1000);
   try{await c.env.DB.prepare("INSERT INTO campaign_submissions(campaign_id,user_id,screenshot_data,screenshot_mime,status,created_at) VALUES(?1,?2,?3,?4,'pending',?5) ON CONFLICT(campaign_id,user_id) DO UPDATE SET screenshot_data=excluded.screenshot_data,screenshot_mime=excluded.screenshot_mime,status='pending',created_at=excluded.created_at,reviewed_at=NULL,reviewed_by=NULL WHERE campaign_submissions.status!='approved'").bind(id,uid,m[2],m[1],now).run();}
   catch{return err(c,409,"SUBMISSION_EXISTS");}
