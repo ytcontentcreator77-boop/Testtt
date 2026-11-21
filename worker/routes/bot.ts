@@ -49,17 +49,46 @@ async function onCallback(env: Env, q: any): Promise<void> {
     const tx = await env.DB.prepare("SELECT * FROM upi_auto_transactions WHERE order_id=?1 AND user_id=?2").bind(orderId,uid).first<any>();
     if (!tx) return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"Payment request not found.",show_alert:true}));
     if (action === "cancel") {
-      await env.DB.prepare("UPDATE upi_auto_transactions SET status='failed' WHERE order_id=?1 AND user_id=?2 AND status='pending'").bind(orderId,uid).run();
-      if(q.message?.photo) await tg(env.BOT_TOKEN,"editMessageCaption",{chat_id:uid,message_id:q.message.message_id,caption:"❌ <b>PAYMENT CANCELLED</b>\n\nThis payment request has been cancelled. You can generate a new QR anytime.",parse_mode:"HTML",reply_markup:{inline_keyboard:[]}}).catch(()=>{});
-      return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"Payment cancelled."}));
+      // Check the gateway first: never cancel a payment that has already been received.
+      try {
+        if (tx.status === "pending") {
+          const checked = await verifyAutoUpi(env, orderId, uid);
+          if (checked.status === "paid") {
+            if (q.message) await tg(env.BOT_TOKEN,"deleteMessage",{chat_id:uid,message_id:q.message.message_id}).catch(()=>{});
+            await tg(env.BOT_TOKEN,"sendMessage",{chat_id:uid,text:"✅ <b>PAYMENT ALREADY RECEIVED</b>\n\n₹"+checked.amount.toFixed(2)+" has been added to your wallet.\nNew balance: ₹"+checked.balance.toFixed(2),parse_mode:"HTML"});
+            return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"Payment received and wallet credited."}));
+          }
+          if (checked.status === "pending") {
+            await env.DB.prepare("UPDATE upi_auto_transactions SET status='failed' WHERE order_id=?1 AND user_id=?2 AND status='pending'").bind(orderId,uid).run();
+          }
+        }
+        const latest = await env.DB.prepare("SELECT status FROM upi_auto_transactions WHERE order_id=?1 AND user_id=?2").bind(orderId,uid).first<{status:string}>();
+        if (latest?.status === "paid") {
+          const paid = await verifyAutoUpi(env, orderId, uid);
+          if (paid.status === "paid") {
+            if (q.message) await tg(env.BOT_TOKEN,"deleteMessage",{chat_id:uid,message_id:q.message.message_id}).catch(()=>{});
+            await tg(env.BOT_TOKEN,"sendMessage",{chat_id:uid,text:"✅ <b>PAYMENT ALREADY RECEIVED</b>\n\n₹"+paid.amount.toFixed(2)+" has been added to your wallet.\nNew balance: ₹"+paid.balance.toFixed(2),parse_mode:"HTML"});
+            return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"Payment received and wallet credited."}));
+          }
+        }
+        if (latest?.status === "failed" || latest?.status === "expired" || latest?.status === "cancelled") {
+          if (q.message) await tg(env.BOT_TOKEN,"deleteMessage",{chat_id:uid,message_id:q.message.message_id}).catch(()=>{});
+          await tg(env.BOT_TOKEN,"sendMessage",{chat_id:uid,text:"❌ <b>PAYMENT CANCELLED</b>\n\nThis QR payment request is no longer active. You can create a new payment whenever you need." ,parse_mode:"HTML"});
+          return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"Payment request cancelled."}));
+        }
+        return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"Payment is still being checked. Please try again.",show_alert:true}));
+      } catch (e) {
+        console.warn("UPI cancel check failed", (e as Error).message);
+        return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"Could not check payment status. Please try again; your request was not cancelled.",show_alert:true}));
+      }
     }
-    if (tx.status === "failed") return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"This payment request is cancelled or expired.",show_alert:true}));
+    if (tx.status === "failed" || tx.status === "expired" || tx.status === "cancelled") return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"This payment request is cancelled or expired.",show_alert:true}));
     try {
       const result=await verifyAutoUpi(env,orderId,uid);
       if(result.status!=="paid") return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:result.status==="expired"?"QR expired. Please generate a new one.":"Payment is not detected yet. Wait a minute and try again.",show_alert:true}));
-      if(q.message?.photo) await tg(env.BOT_TOKEN,"editMessageCaption",{chat_id:uid,message_id:q.message.message_id,caption:"✅ <b>PAYMENT VERIFIED SUCCESSFULLY</b>\n\n💰 Added: <b>₹"+result.amount.toFixed(2)+"</b>\n💳 New balance: <b>₹"+result.balance.toFixed(2)+"</b>\n🧾 UTR: <code>"+(result.utr||"N/A")+"</code>\n\nYour wallet has been credited.",parse_mode:"HTML",reply_markup:{inline_keyboard:[]}}).catch(()=>{});
+      if(q.message) await tg(env.BOT_TOKEN,"deleteMessage",{chat_id:uid,message_id:q.message.message_id}).catch(()=>{});
       await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:"Payment verified. Balance credited."});
-      await tg(env.BOT_TOKEN,"sendMessage",{chat_id:uid,text:"🎉 <b>Payment successful!</b>\n₹"+result.amount.toFixed(2)+" has been added to your wallet.\nNew balance: ₹"+result.balance.toFixed(2),parse_mode:"HTML"});
+      await tg(env.BOT_TOKEN,"sendMessage",{chat_id:uid,text:"🎉 <b>PAYMENT SUCCESSFUL</b>\n\n💰 Added: <b>₹"+result.amount.toFixed(2)+"</b>\n💳 New balance: <b>₹"+result.balance.toFixed(2)+"</b>\n🧾 UTR: <code>"+(result.utr||"N/A")+"</code>\n\nYour wallet has been credited.",parse_mode:"HTML"});
     } catch(e) {
       const code=e instanceof Error?e.message:"VERIFY_FAILED";
       await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id,text:code==="UPI_AMOUNT_MISMATCH"?"Paid amount does not match this order. Contact support.":"Verification service is temporarily unavailable. Try again.",show_alert:true});
