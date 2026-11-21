@@ -10,7 +10,7 @@ export function AnnouncementPopup() {
   const [vars,setVars]=useState<Vars>({});
   const [closing,setClosing]=useState(false);
   useEffect(()=>{let live=true;api<{announcement:Item|null;vars?:Vars}>("/announcements/current").then(r=>{if(live){setItem(r.announcement);setVars(r.vars??{});}}).catch(()=>{});return()=>{live=false};},[]);
-  const dismiss=async()=>{if(!item||closing)return;setClosing(true);try{await api("/announcements/"+item.id+"/dismiss",{method:"POST",body:{}});}catch{}setItem(null);};
+  const dismiss=()=>{if(!item||closing)return;setClosing(true);setItem(null);};
   if(!item)return null;
   const fill=(value:string)=>value.replace(/\{([a-z][a-z0-9_]*)\}/gi,(whole,key)=>vars[key.toLowerCase()]??whole);
   const title=fill(item.title),description=fill(item.description);
