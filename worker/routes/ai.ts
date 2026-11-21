@@ -217,7 +217,7 @@ export async function replyToTelegram(env: AppEnv["Bindings"], userId: number, c
     `SELECT p.code,p.daily_requests,p.context_messages,p.max_output_tokens
      FROM ai_user_plans s JOIN ai_plans p ON p.code=s.plan_code
      WHERE s.user_id=?1 AND s.status='active' AND (s.ends_at IS NULL OR s.ends_at>?2) AND p.enabled=1
-     ORDER BY s.starts_at DESC LIMIT 1`,
+     ORDER BY s.starts_at DESC,s.id DESC LIMIT 1`,
   ).bind(userId, stamp).first<PlanRow>() ?? await env.DB.prepare("SELECT code,daily_requests,context_messages,max_output_tokens FROM ai_plans WHERE code='free' AND enabled=1").first<PlanRow>() ?? {code:"free",daily_requests:20,context_messages:12,max_output_tokens:1200};
   await env.DB.prepare("INSERT OR IGNORE INTO ai_usage(user_id,day) VALUES(?1,?2)").bind(userId,day).run();
   const count = await env.DB.prepare("SELECT requests FROM ai_usage WHERE user_id=?1 AND day=?2").bind(userId,day).first<{requests:number}>();
