@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "./app";
+import { tg } from "../telegram";
 
 export const ai = new Hono<AppEnv>();
 
@@ -89,6 +90,37 @@ ai.post("/plans/:code/purchase", async (c) => {
   }
   const user = await c.env.DB.prepare("SELECT balance_inr FROM users WHERE id=?1").bind(userId).first<{balance_inr:number}>();
   return c.json({ ok:true, plan:code, expiresAt:stamp+30*86400, chargedInr:amountInr, discountCents:discount, balanceInr:Number(user?.balance_inr??0) });
+});
+
+
+ai.post("/plans/:code/stars-invoice", async (c) => {
+  const code=c.req.param("code");
+  const body=await c.req.json<{couponCode?:string}>().catch(()=>null);
+  const plan=await c.env.DB.prepare("SELECT * FROM ai_plans WHERE code=?1 AND enabled=1").bind(code).first<any>();
+  if(!plan || Number(plan.price_cents)<=0) return c.json({error:"PLAN_NOT_PURCHASABLE",code:"PLAN_NOT_PURCHASABLE"},400);
+  const couponCode=String(body?.couponCode??"").trim().toUpperCase();
+  let coupon:any=null,discount=0;
+  if(couponCode){
+    coupon=await c.env.DB.prepare("SELECT * FROM ai_plan_coupons WHERE code=?1 COLLATE NOCASE AND active=1").bind(couponCode).first<any>();
+    const stamp=now();
+    const redeemed=coupon?await c.env.DB.prepare("SELECT 1 FROM ai_coupon_redemptions WHERE coupon_id=?1 AND user_id=?2").bind(coupon.id,c.get("user").id).first():null;
+    if(!coupon||(coupon.plan_code&&coupon.plan_code!==code)||(coupon.starts_at&&coupon.starts_at>stamp)||(coupon.expires_at&&coupon.expires_at<stamp)||(coupon.max_uses&&coupon.used_count>=coupon.max_uses)||redeemed)
+      return c.json({error:"COUPON_INVALID_OR_EXPIRED",code:"COUPON_INVALID_OR_EXPIRED"},400);
+    discount=coupon.discount_type==="percent"?Math.floor(plan.price_cents*Math.min(100,coupon.discount_value)/100):Math.min(plan.price_cents,coupon.discount_value);
+  }
+  const finalCents=Math.max(0,Number(plan.price_cents)-discount);
+  const stars=Math.max(1,Math.ceil((finalCents/100)*Number(c.get("settings").stars_per_usd||100)));
+  const userId=c.get("user").id,stamp=now();
+  const row=await c.env.DB.prepare("INSERT INTO ai_star_payments(user_id,plan_code,stars,coupon_code,discount_cents,status,created_at) VALUES(?1,?2,?3,?4,?5,'pending',?6) RETURNING id")
+    .bind(userId,code,stars,couponCode||null,discount,stamp).first<{id:number}>();
+  if(!row) return c.json({error:"PAYMENT_CREATE_FAILED",code:"PAYMENT_CREATE_FAILED"},500);
+  try{
+    const link=await tg<string>(c.env.BOT_TOKEN,"createInvoiceLink",{title:("AI "+plan.name).slice(0,32),description:("30-day "+plan.name+" AI subscription").slice(0,255),payload:"aip"+row.id,currency:"XTR",prices:[{label:plan.name+" AI plan",amount:stars}]});
+    return c.json({url:link,stars,paymentId:row.id});
+  }catch(e){
+    await c.env.DB.prepare("UPDATE ai_star_payments SET status='failed' WHERE id=?1 AND status='pending'").bind(row.id).run();
+    return c.json({error:"STARS_INVOICE_FAILED",code:"STARS_INVOICE_FAILED"},502);
+  }
 });
 
 ai.get("/plans", async (c) => {
