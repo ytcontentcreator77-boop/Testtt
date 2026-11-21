@@ -61,9 +61,10 @@ aiAdmin.get("/ai/coupons", async (c) => c.json({ items: (await c.env.DB.prepare(
 aiAdmin.post("/ai/coupons", async (c) => {
   const b = await c.req.json<any>().catch(() => null);
   if (!b || typeof b.code !== "string" || !b.code.trim() || !["percent","fixed"].includes(b.discount_type) || !Number.isFinite(Number(b.discount_value)) || Number(b.discount_value) <= 0) return c.json({ error: "INVALID_COUPON", code: "INVALID_COUPON" }, 400);
+  if (b.discount_type === "percent" && Number(b.discount_value) > 100) return c.json({ error: "INVALID_DISCOUNT", code: "INVALID_DISCOUNT" }, 400);
   try {
-    const r = await c.env.DB.prepare("INSERT INTO ai_plan_coupons(code,discount_type,discount_value,plan_code,max_uses,expires_at,active,created_at) VALUES(?1,?2,?3,?4,?5,?6,1,?7)")
-      .bind(b.code.trim().toUpperCase().slice(0,40),b.discount_type,Math.floor(Number(b.discount_value)),b.plan_code||null,b.max_uses?Math.max(1,Math.floor(Number(b.max_uses))):null,b.expires_at?Math.floor(Number(b.expires_at)):null,Math.floor(Date.now()/1000)).run();
+    const r = await c.env.DB.prepare("INSERT INTO ai_plan_coupons(code,discount_type,discount_value,plan_code,max_uses,starts_at,expires_at,active,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,1,?8)")
+      .bind(b.code.trim().toUpperCase().slice(0,40),b.discount_type,Math.floor(Number(b.discount_value)),b.plan_code||null,b.max_uses?Math.max(1,Math.floor(Number(b.max_uses))):null,b.starts_at?Math.floor(Number(b.starts_at)):null,b.expires_at?Math.floor(Number(b.expires_at)):null,Math.floor(Date.now()/1000)).run();
     return c.json({ ok: true, id: r.meta.last_row_id });
   } catch { return c.json({ error: "COUPON_EXISTS", code: "COUPON_EXISTS" }, 409); }
 });
