@@ -16,6 +16,7 @@ import { Profile } from "./screens/Profile";
 import { Developer } from "./screens/Developer";
 import { HowToUse } from "./screens/HowToUse";
 import { AnnouncementPopup } from "./screens/AnnouncementPopup";
+import { Campaigns } from "./screens/Campaigns";
 import { KeyShop, KeyProduct, BuyKey, KeyDelivered, MyKeys, KeyWallet, KeyFunds, UpiAutoPayment } from "./screens/KeyStore";
 import { LazyAdminRoutes, LazyPublicPages } from "./lazy";
 
@@ -118,6 +119,7 @@ export function App() {
     else if (route.path === "/developer") screen = <Developer />;
     else if (route.path === "/how-to-use") screen = <HowToUse />;
     else if (route.path === "/invite") screen = <Invite />;
+    else if (route.path === "/campaigns") screen = <Campaigns />;
     else if (a === "admin" && me.isAdmin) screen = <LazyAdminRoutes parts={route.parts.slice(1)} query={route.query} />;
     else screen = <KeyShop />;
   }
