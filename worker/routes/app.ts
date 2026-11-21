@@ -540,3 +540,59 @@ app.get("/bonus/status", async (c) => {
 app.post("/bonus/claim",async(c)=>{const s=c.get("settings"),uid=c.get("user").id;if(!s.bonus_enabled)return err(c,403,"BONUS_DISABLED");const u=await c.env.DB.prepare("SELECT last_bonus_at FROM users WHERE id=?1").bind(uid).first<{last_bonus_at:number}>();const now=Math.floor(Date.now()/1000);const wait=Math.max(0,Number(s.bonus_cooldown_hours)*3600-(now-(u?.last_bonus_at??0)));if(wait>0)return err(c,429,"BONUS_COOLDOWN",{remainingSeconds:wait});const amount=s.bonus_mode==="fixed"?Number(s.bonus_fixed_inr):Number((Number(s.bonus_min_inr)+Math.random()*(Number(s.bonus_max_inr)-Number(s.bonus_min_inr))).toFixed(2));const [claim]=await c.env.DB.batch([c.env.DB.prepare("UPDATE users SET balance_inr=balance_inr+?2,last_bonus_at=?3 WHERE id=?1 AND COALESCE(last_bonus_at,0)=?4").bind(uid,amount,now,u?.last_bonus_at??0),c.env.DB.prepare("INSERT INTO bonus_claims(user_id,amount_inr,claimed_at) SELECT ?1,?2,?3 WHERE changes()=1").bind(uid,amount,now),c.env.DB.prepare("INSERT INTO inr_ledger(user_id,delta_inr,kind,note,created_at) SELECT ?1,?2,'bonus','Claim bonus',?3 WHERE changes()=1").bind(uid,amount,now)]);if(!claim.meta.changes)return err(c,409,"BONUS_ALREADY_CLAIMED");const bal=await c.env.DB.prepare("SELECT balance_inr FROM users WHERE id=?1").bind(uid).first<{balance_inr:number}>();return c.json({ok:true,amount,balance:bal?.balance_inr??0});});
 app.get("/catalog/categories",async(c)=>{const {results}=await c.env.DB.prepare("SELECT slug,name,icon,image_url FROM key_categories WHERE enabled=1 ORDER BY sort,id").all();return c.json({items:results});});
 app.get("/catalog/platforms",async(c)=>{const {results}=await c.env.DB.prepare("SELECT slug,name,logo_url FROM key_platforms WHERE enabled=1 ORDER BY sort,id").all();return c.json({items:results});});
+
+
+/* Campaigns: active tasks, membership verification and screenshot submissions. */
+app.get("/campaigns", async (c) => {
+  const uid=c.get("user").id;
+  const {results}=await c.env.DB.prepare(
+    "SELECT c.id,c.title,c.description,c.type,c.reward_inr,c.channels_json,cc.completed_at,cs.status AS submission_status FROM campaigns c LEFT JOIN campaign_completions cc ON cc.campaign_id=c.id AND cc.user_id=?1 LEFT JOIN campaign_submissions cs ON cs.campaign_id=c.id AND cs.user_id=?1 WHERE c.active=1 ORDER BY c.id DESC"
+  ).bind(uid).all<any>();
+  return c.json({items:results.map((x:any)=>({...x,channels:JSON.parse(x.channels_json||"[]"),channels_json:undefined,completed:!!x.completed_at}))});
+});
+app.post("/campaigns/:id/verify", async (c) => {
+  const uid=c.get("user").id,id=Number(c.req.param("id"));
+  if(!Number.isSafeInteger(id)||id<1)return err(c,400,"INVALID_CAMPAIGN");
+  const campaign=await c.env.DB.prepare("SELECT * FROM campaigns WHERE id=?1 AND active=1 AND type='channel'").bind(id).first<any>();
+  if(!campaign)return err(c,404,"CAMPAIGN_NOT_FOUND");
+  const prior=await c.env.DB.prepare("SELECT id FROM campaign_completions WHERE campaign_id=?1 AND user_id=?2").bind(id,uid).first();
+  if(prior)return c.json({ok:true,alreadyCompleted:true});
+  const channels=JSON.parse(campaign.channels_json||"[]") as {chat_id:string;url:string;title:string}[];
+  if(!channels.length)return err(c,400,"CAMPAIGN_CHANNELS_MISSING");
+  const me=await tg<any>(c.env.BOT_TOKEN,"getMe",{});
+  for(const ch of channels){
+    try{
+      const botMember=await tg<any>(c.env.BOT_TOKEN,"getChatMember",{chat_id:ch.chat_id,user_id:me.id});
+      if(!["administrator","creator"].includes(botMember.status))return err(c,409,"BOT_NOT_ADMIN",{channel:ch.title||ch.chat_id});
+      const member=await tg<any>(c.env.BOT_TOKEN,"getChatMember",{chat_id:ch.chat_id,user_id:uid});
+      const joined=member.status==="creator"||member.status==="administrator"||member.status==="member"||(member.status==="restricted"&&member.is_member===true);
+      if(!joined)return err(c,403,"CHANNEL_NOT_JOINED",{channel:ch.title||ch.chat_id,url:ch.url});
+    }catch(e){
+      const msg=(e as Error).message||"";
+      if(msg.includes("BOT_NOT_ADMIN"))throw e;
+      return err(c,502,"CHANNEL_VERIFY_FAILED",{channel:ch.title||ch.chat_id,reason:msg.slice(0,180)});
+    }
+  }
+  const now=Math.floor(Date.now()/1000),reward=Math.max(0,Number(campaign.reward_inr)||0);
+  const [insert]=await c.env.DB.batch([
+    c.env.DB.prepare("INSERT OR IGNORE INTO campaign_completions(campaign_id,user_id,completed_at) VALUES(?1,?2,?3)").bind(id,uid,now),
+    c.env.DB.prepare("UPDATE users SET balance_inr=balance_inr+?2 WHERE id=?1 AND changes()=1").bind(uid,reward),
+    c.env.DB.prepare("INSERT INTO inr_ledger(user_id,delta_inr,kind,ref,note,created_at) SELECT ?1,?2,'campaign',?3,?4,?5 WHERE changes()=1").bind(uid,reward,id,"Campaign reward: "+campaign.title,now)
+  ]);
+  if(!insert.meta.changes)return c.json({ok:true,alreadyCompleted:true});
+  const bal=await c.env.DB.prepare("SELECT balance_inr FROM users WHERE id=?1").bind(uid).first<any>();
+  await tg(c.env.BOT_TOKEN,"sendMessage",{chat_id:uid,text:"🎉 Thank you! Your campaign task is verified.\n\nAdded to your wallet: ₹"+reward.toFixed(2)+"\nNew balance: ₹"+Number(bal?.balance_inr||0).toFixed(2)}).catch(()=>{});
+  return c.json({ok:true,reward,balance:bal?.balance_inr??0});
+});
+app.post("/campaigns/:id/submit", async (c) => {
+  const uid=c.get("user").id,id=Number(c.req.param("id")),b=await readBody<{screenshot:string}>(c);
+  if(!Number.isSafeInteger(id)||id<1||!b?.screenshot||typeof b.screenshot!=="string")return err(c,400,"INVALID_SUBMISSION");
+  const campaign=await c.env.DB.prepare("SELECT id FROM campaigns WHERE id=?1 AND active=1 AND type='manual'").bind(id).first();
+  if(!campaign)return err(c,404,"CAMPAIGN_NOT_FOUND");
+  const m=/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(b.screenshot);
+  if(!m||m[2].length>2_800_000)return err(c,400,"INVALID_SCREENSHOT");
+  const now=Math.floor(Date.now()/1000);
+  try{await c.env.DB.prepare("INSERT INTO campaign_submissions(campaign_id,user_id,screenshot_data,screenshot_mime,status,created_at) VALUES(?1,?2,?3,?4,'pending',?5) ON CONFLICT(campaign_id,user_id) DO UPDATE SET screenshot_data=excluded.screenshot_data,screenshot_mime=excluded.screenshot_mime,status='pending',created_at=excluded.created_at,reviewed_at=NULL,reviewed_by=NULL WHERE campaign_submissions.status!='approved'").bind(id,uid,m[2],m[1],now).run();}
+  catch{return err(c,409,"SUBMISSION_EXISTS");}
+  return c.json({ok:true,status:"pending"});
+});
