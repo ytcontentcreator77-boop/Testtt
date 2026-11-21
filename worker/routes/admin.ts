@@ -1140,7 +1140,7 @@ admin.post("/campaigns",async(c)=>{
  const b=await readBody<{title:string;description?:string;type:string;reward_inr:number;channels?:any[]}>(c);
  if(!b||!b.title?.trim()||!["channel","manual"].includes(b.type)||!Number.isFinite(Number(b.reward_inr))||Number(b.reward_inr)<0||Number(b.reward_inr)>100000)return err(c,400,"INVALID_CAMPAIGN");
  const channels=b.type==="channel"?(Array.isArray(b.channels)?b.channels:[]):[];
- if(b.type==="channel"&&(!channels.length||channels.length>20||channels.some(x=>!x?.chat_id||!/^https?:\\/\\//i.test(String(x.url)))))return err(c,400,"INVALID_CHANNELS");
+ if(b.type==="channel"&&(!channels.length||channels.length>20||channels.some(x=>!x?.chat_id||!/^https?:\/\//i.test(String(x.url)))))return err(c,400,"INVALID_CHANNELS");
  if(b.type==="channel"){
   try{const me=await tg<any>(c.env.BOT_TOKEN,"getMe",{});for(const ch of channels){const member=await tg<any>(c.env.BOT_TOKEN,"getChatMember",{chat_id:ch.chat_id,user_id:me.id});if(!["administrator","creator"].includes(member.status))return err(c,409,"BOT_NOT_ADMIN",{channel:ch.title||ch.chat_id});}}
   catch(e){return err(c,400,"CHANNEL_ACCESS_CHECK_FAILED",{reason:(e as Error).message.slice(0,180)});}
