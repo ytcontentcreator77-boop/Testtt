@@ -1001,7 +1001,7 @@ admin.post("/announcements", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const row = await c.env.DB.prepare("INSERT INTO announcements(title,description,image_url,button_text,button_enabled,button_url,active,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?8) RETURNING *")
     .bind(title, description, imageUrl || null, buttonText, buttonEnabled ? 1 : 0, buttonEnabled ? buttonUrl : null, b.active === false ? 0 : 1, now).first<any>();
-  let broadcast = null;
+  let broadcast: { total: number } | null = null;
   if (b.broadcast) {
     try { broadcast = await startAnnouncementBroadcast(c.env, c.get("user").id, { title, description, imageUrl: imageUrl || null, buttonText, buttonEnabled, buttonUrl: buttonEnabled ? buttonUrl : null }); }
     catch (e) { if ((e as Error).message === "BROADCAST_RUNNING") return err(c, 409, "BROADCAST_RUNNING", { announcementId: row.id }); if ((e as Error).message === "NO_AUDIENCE") return err(c, 409, "NO_AUDIENCE", { announcementId: row.id }); throw e; }
