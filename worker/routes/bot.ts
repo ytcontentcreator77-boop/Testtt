@@ -327,5 +327,9 @@ async function handle(env: Env, u: any): Promise<void> {
   }
   // An admin's message that isn't a command is never answered with help: the broadcast menu may be waiting for it
   if (!cmd && isOwner(env, await getSettings(env), from.id)) return void (await onBroadcastMessage(env, from.id, m));
-  if (!cmd && text && !isOwner(env, await getSettings(env), from.id)) {\n    const answer = await replyToTelegram(env, from.id, text);\n    return void (await tg(env.BOT_TOKEN, "sendMessage", { chat_id: from.id, text: answer, link_preview_options: { is_disabled: true } }));\n  }\n  await sendHelp(env, from.id, lang);
+  if (!cmd && text && !isOwner(env, await getSettings(env), from.id)) {
+    const answer = await replyToTelegram(env, from.id, text);
+    return void (await tg(env.BOT_TOKEN, "sendMessage", { chat_id: from.id, text: answer, link_preview_options: { is_disabled: true } }));
+  }
+  await sendHelp(env, from.id, lang);
 }
