@@ -1037,3 +1037,94 @@ admin.post("/announcements/:id/broadcast", async (c) => {
     throw e;
   }
 });
+
+
+// ---- Database backup & restore ----
+// Full exports include private settings and provider/payment API credentials. Keep backup files private.
+type BackupScope = "full" | "key-catalog" | "users";
+const BACKUP_FORMAT = "hero-bot-backup";
+async function backupTables(db: AppEnv["Bindings"]["DB"]): Promise<string[]> {
+  const r = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name!='d1_migrations' ORDER BY name").all<{name:string}>();
+  return r.results.map(x => x.name);
+}
+function quoteTable(name: string): string { return '"' + name.replace(/"/g, '""') + '"'; }
+async function backupOrder(db: AppEnv["Bindings"]["DB"], names: string[]): Promise<string[]> {
+  const allowed = new Set(names);
+  const parents = new Map<string, Set<string>>();
+  for (const name of names) {
+    const r = await db.prepare("PRAGMA foreign_key_list(" + quoteTable(name) + ")").all<{table:string}>();
+    parents.set(name, new Set(r.results.map(x => x.table).filter(x => allowed.has(x))));
+  }
+  const ordered: string[] = [];
+  const remaining = new Set(names);
+  while (remaining.size) {
+    const ready = [...remaining].filter(n => [...(parents.get(n) ?? [])].every(p => !remaining.has(p)));
+    if (!ready.length) { ordered.push(...remaining); break; }
+    for (const n of ready) { ordered.push(n); remaining.delete(n); }
+  }
+  return ordered;
+}
+admin.get("/backup/export", async (c) => {
+  const scope = (c.req.query("scope") || "full") as BackupScope;
+  if (!["full","key-catalog","users"].includes(scope)) return err(c,400,"INVALID_BACKUP_SCOPE");
+  const all = await backupTables(c.env.DB);
+  const names = scope === "users" ? ["users"] : scope === "key-catalog" ? ["key_categories","key_platforms"] : all;
+  for (const name of names) if (!all.includes(name)) return err(c,500,"BACKUP_TABLE_MISSING",{table:name});
+  const tables: Record<string, unknown[]> = {};
+  for (const name of names) {
+    const r = await c.env.DB.prepare("SELECT * FROM " + quoteTable(name)).all();
+    tables[name] = r.results as unknown[];
+  }
+  return c.json({ format:BACKUP_FORMAT, version:1, scope, exportedAt:new Date().toISOString(), tables });
+});
+admin.post("/backup/import", async (c) => {
+  const b = await readBody<any>(c);
+  if (!b || b.format !== BACKUP_FORMAT || b.version !== 1 || !["full","key-catalog","users"].includes(b.scope) || !b.tables || typeof b.tables !== "object" || Array.isArray(b.tables)) return err(c,400,"INVALID_BACKUP_FILE");
+  const scope = b.scope as BackupScope;
+  const all = await backupTables(c.env.DB);
+  const allowedNames = scope === "users" ? ["users"] : scope === "key-catalog" ? ["key_categories","key_platforms"] : all;
+  const inputNames = Object.keys(b.tables);
+  if (inputNames.some(n => !allowedNames.includes(n)) || (scope !== "full" && allowedNames.some(n => !inputNames.includes(n)))) return err(c,400,"BACKUP_SCOPE_MISMATCH");
+  const totalRows = inputNames.reduce((n,k)=>n+(Array.isArray(b.tables[k])?b.tables[k].length:1_000_000),0);
+  if (totalRows > 50000) return err(c,413,"BACKUP_TOO_LARGE",{maxRows:50000});
+  const columns = new Map<string,string[]>();
+  for (const name of inputNames) {
+    if (!all.includes(name)) return err(c,400,"UNKNOWN_BACKUP_TABLE",{table:name});
+    if (!Array.isArray(b.tables[name])) return err(c,400,"INVALID_BACKUP_TABLE",{table:name});
+    const info = await c.env.DB.prepare("PRAGMA table_info(" + quoteTable(name) + ")").all<{name:string}>();
+    columns.set(name,info.results.map(x=>x.name));
+    for (const row of b.tables[name]) {
+      if (!row || typeof row !== "object" || Array.isArray(row) || Object.keys(row).some(k=>!columns.get(name)!.includes(k))) return err(c,400,"INVALID_BACKUP_ROW",{table:name});
+    }
+  }
+  const replaceNames = scope === "full" ? all : scope === "key-catalog" ? ["key_categories","key_platforms"] : [];
+  if (scope === "users" && inputNames[0] !== "users") return err(c,400,"INVALID_BACKUP_SCOPE");
+  if (replaceNames.length) {
+    const ordered = await backupOrder(c.env.DB,replaceNames);
+    for (const name of [...ordered].reverse()) await c.env.DB.prepare("DELETE FROM " + quoteTable(name)).run();
+    // Insert parent rows before dependent rows; preserve explicit IDs and all imported values.
+    const statements: D1PreparedStatement[] = [];
+    for (const name of ordered) {
+      for (const row of b.tables[name] ?? []) {
+        const keys = Object.keys(row);
+        if (!keys.length) continue;
+        const sql = "INSERT INTO " + quoteTable(name) + " (" + keys.map(quoteTable).join(",") + ") VALUES (" + keys.map((_,i)=>"?" + (i+1)).join(",") + ")";
+        statements.push(c.env.DB.prepare(sql).bind(...keys.map(k=>row[k])));
+      }
+    }
+    for (let i=0;i<statements.length;i+=100) await c.env.DB.batch(statements.slice(i,i+100));
+  } else {
+    // User-only imports merge by Telegram ID and do not delete accounts absent from the file.
+    const name = "users";
+    const cols = columns.get(name)!;
+    for (const row of b.tables.users as Record<string,unknown>[]) {
+      if (!Number.isSafeInteger(Number(row.id))) return err(c,400,"INVALID_USER_ROW");
+      const keys = Object.keys(row);
+      if (!keys.includes("id")) return err(c,400,"INVALID_USER_ROW");
+      const updates = keys.filter(k=>k!=="id");
+      const sql = "INSERT INTO users ("+keys.map(quoteTable).join(",")+") VALUES ("+keys.map((_,i)=>"?"+(i+1)).join(",")+") ON CONFLICT(id) DO UPDATE SET "+(updates.length?updates.map(k=>quoteTable(k)+"=excluded."+quoteTable(k)).join(","):"id=excluded.id");
+      await c.env.DB.prepare(sql).bind(...keys.map(k=>row[k])).run();
+    }
+  }
+  return c.json({ok:true,scope,importedTables:inputNames.length,importedRows:totalRows});
+});
