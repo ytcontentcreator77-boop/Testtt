@@ -14,7 +14,7 @@ function ChatList({ items, onPick, onNew }: { items: Chat[]; onPick: (id: string
   return <div class="ai-history-list">
     <button class="ai-new-chat" onClick={onNew}><Icon name="plus" size={17}/> New conversation</button>
     {items.length ? items.map((chat) => <button class="ai-history-item" key={chat.id} onClick={() => onPick(chat.id)}>
-      <span class="ai-history-icon"><Icon name="message" size={17}/></span>
+      <span class="ai-history-icon"><Icon name="chat" size={17}/></span>
       <span class="ai-history-copy"><b>{chat.title || "New chat"}</b><small>{chat.model || "AI conversation"} · {new Date(chat.updated_at*1000).toLocaleDateString()}</small></span>
     </button>) : <p class="ai-muted">Your saved conversations will appear here.</p>}
   </div>;
@@ -100,7 +100,7 @@ export function AiChat() {
     <header class="ai-topbar">
       <div class="ai-brand"><span class="ai-brand-mark"><Icon name="spark" size={19}/></span><span><b>AI Assistant</b><small>Private conversations</small></span></div>
       <div class="ai-top-actions">
-        <button class="ai-icon-button" aria-label="Conversation history" onClick={()=>setHistoryOpen(!historyOpen)}><Icon name="history" size={19}/></button>
+        <button class="ai-icon-button" aria-label="Conversation history" onClick={()=>setHistoryOpen(!historyOpen)}><Icon name="clock" size={19}/></button>
         <button class="ai-icon-button" aria-label="New chat" onClick={()=>{setSelectedId("");setMessages([]);navigate("/");}}><Icon name="plus" size={19}/></button>
       </div>
     </header>
@@ -121,17 +121,17 @@ export function AiChat() {
         <h1>What can I help you with?</h1>
         <p>Ask questions, write code, brainstorm ideas, summarize documents and more.</p>
         <div class="ai-suggestions">
-          {["Explain a difficult topic simply","Help me build a website","Write and debug some code"].map((s)=><button onClick={()=>setPrompt(s)}>{s}<Icon name="arrow-up-right" size={15}/></button>)}
+          {["Explain a difficult topic simply","Help me build a website","Write and debug some code"].map((s)=><button onClick={()=>setPrompt(s)}>{s}<Icon name="out" size={15}/></button>)}
         </div>
       </div>}
       {busy ? <div class="ai-message assistant"><span class="ai-avatar">AI</span><div class="ai-bubble ai-thinking"><i/><i/><i/></div></div> : null}
       {error ? <div class="ai-error">{error}<button onClick={()=>setError("")}>Dismiss</button></div> : null}
     </section>
     <footer class="ai-composer-wrap">
-      {selectedId ? <div class="ai-chat-actions"><button onClick={()=>{const c=chats.find(x=>x.id===selectedId);const name=prompt("Rename conversation",c?.title||"New chat");if(name?.trim())api("/ai/chats/"+encodeURIComponent(selectedId),{method:"PATCH",body:{title:name}}).then(()=>api<{items:Chat[]}>("/ai/chats").then(r=>setChats(r.items))).catch(()=>setError("Rename failed"));}}>Rename</button><button onClick={removeChat}>Delete chat</button></div> : null}
+      {selectedId ? <div class="ai-chat-actions"><button onClick={()=>{const c=chats.find(x=>x.id===selectedId);const name=window.prompt("Rename conversation",c?.title||"New chat");if(name?.trim())api("/ai/chats/"+encodeURIComponent(selectedId),{method:"PATCH",body:{title:name}}).then(()=>api<{items:Chat[]}>("/ai/chats").then(r=>setChats(r.items))).catch(()=>setError("Rename failed"));}}>Rename</button><button onClick={removeChat}>Delete chat</button></div> : null}
       <div class="ai-composer">
         <textarea value={prompt} rows={1} placeholder="Message AI…" onInput={(e)=>setPrompt((e.currentTarget as HTMLTextAreaElement).value)} onKeyDown={(e)=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void send();}}}/>
-        <button class="ai-send" disabled={busy||!prompt.trim()||!models.length} onClick={()=>void send()} aria-label="Send message"><Icon name="arrow-up" size={19}/></button>
+        <button class="ai-send" disabled={busy||!prompt.trim()||!models.length} onClick={()=>void send()} aria-label="Send message"><Icon name="plus" size={19}/></button>
       </div>
       <div class="ai-footnote">AI can make mistakes. Check important information. · <a href="#/plans">View plans</a></div>
     </footer>
