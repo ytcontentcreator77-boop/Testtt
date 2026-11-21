@@ -19,6 +19,7 @@ import { LEGEND, MoneyCells, MoneyTotalsBar, orderCells, rateCells, type Report 
 import { AdminsSection, type Owners } from "./Access";
 import { AdminAnnouncements } from "./Announcements";
 import { AdminCampaigns } from "./Campaigns";
+import { AdminAiManagement } from "./AiManagement";
 import {
   BackNav,
   BottomButtons,
@@ -74,6 +75,7 @@ export function AdminRoutes({ parts, query }: { parts: string[]; query: URLSearc
   if (a === "announcements") return <AdminAnnouncements />;
   if (a === "campaigns") return <AdminCampaigns />;
   if (a === "backup") return <AdminBackup />;
+  if (a === "ai") return <AdminAiManagement />;
   if (a === "messages") return <AdminMessages />;
   if (a === "icons") return <AdminIcons />;
   return <AdminHome />;
@@ -306,6 +308,7 @@ interface Overview {
 }
 
 const MANAGE: [string, IconName, string, string][] = [
+  ["AI providers, plans & coupons", "bot", "var(--sky)", "/admin/ai"],
   ["Key products & stock", "tag", "var(--lime)", "/admin/key-store"],
   ["Reseller API providers", "plug", "var(--sky)", "/admin/key-apis"],
   ["Manual payment approvals", "receipt", "var(--sky)", "/admin/manual-payments"],
