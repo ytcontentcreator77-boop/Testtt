@@ -78,6 +78,8 @@ aiAdmin.post("/ai/users/:id/plan", async (c) => {
   const b = await c.req.json<{planCode?:string;days?:number}>().catch(()=>null);
   if (!Number.isSafeInteger(userId) || userId <= 0 || !b?.planCode) return c.json({error:"INVALID_BODY",code:"INVALID_BODY"},400);
   const plan = await c.env.DB.prepare("SELECT code FROM ai_plans WHERE code=?1 AND enabled=1").bind(b.planCode).first();
+  const user = await c.env.DB.prepare("SELECT id FROM users WHERE id=?1").bind(userId).first();
+  if (!user) return c.json({error:"USER_NOT_FOUND",code:"USER_NOT_FOUND"},404);
   if (!plan) return c.json({error:"PLAN_NOT_FOUND",code:"PLAN_NOT_FOUND"},404);
   const stamp = Math.floor(Date.now()/1000);
   const days = Math.max(1,Math.min(3650,Math.floor(Number(b.days)||30)));
