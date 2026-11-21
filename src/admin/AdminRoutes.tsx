@@ -2333,11 +2333,6 @@ function AdminSettings() {
             <dl class="card">
               <Kv label="Bot">{s.bot_username ? `@${s.bot_username}` : "not connected"}</Kv>
               <Kv label="Order updates">Scheduled provider status checks</Kv>
-              <Kv label="Mini App URL">
-                <span class="mono" dir="ltr">
-                  {s.app_url || "—"}
-                </span>
-              </Kv>
             </dl>
             <List>
               <Row accent title={connecting ? "Reconnecting…" : "Reconnect bot & provider order checks"} onClick={reconnect} disabled={connecting} chevron={false} />
