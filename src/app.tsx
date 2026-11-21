@@ -116,8 +116,8 @@ export function App() {
     else if (a === "products" && b) screen = <KeyProduct />;
     else if (a === "buy" && b && c) screen = <BuyKey />;
     else if (a === "key-delivered" && b) screen = <KeyDelivered />;
-    else if (route.path === "/keys" || route.path === "/orders") screen = <MyKeys />;
-    else if (route.path === "/key-wallet" || route.path === "/wallet") screen = <KeyWallet />;
+    else if (route.path === "/keys") screen = <MyKeys />;
+    else if (route.path === "/key-wallet") screen = <KeyWallet />;
     else if (route.path === "/funds") screen = <KeyFunds />;
     else if (route.path === "/upi-auto-payment") screen = <UpiAutoPayment />;
     else if (route.path === "/profile") screen = <Profile />;
