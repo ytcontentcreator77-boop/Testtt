@@ -315,7 +315,7 @@ const MANAGE: [string, IconName, string, string][] = [
   ["Branding", "spark", "var(--pink)", "/admin/branding"],
   ["Settings", "plug", "var(--lavender)", "/admin/settings"],
   ["Payment methods", "receipt", "var(--lavender)", "/admin/payment-methods"],
-  ["Announcements", "bell", "var(--pink)", "/admin/announcements"],
+  ["Announcements", "chat", "var(--pink)", "/admin/announcements"],
   ["Bot messages", "chat", "var(--sky)", "/admin/messages"],
 ];
 
