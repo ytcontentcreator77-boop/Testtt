@@ -127,7 +127,7 @@ export function App() {
       <Fragment key={key}>{screen}</Fragment>
       {tabs ? <TabBar /> : null}
       <Toasts />
-      {me && me.langChosen && me.termsAccepted && !me.channelRequired && !outside && !error ? <AnnouncementPopup me={me} /> : null}
+      {me && me.langChosen && me.termsAccepted && !me.channelRequired && !outside && !error ? <AnnouncementPopup /> : null}
     </>
   );
 }
