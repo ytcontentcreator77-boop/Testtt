@@ -27,6 +27,12 @@ export function AdminAiManagement() {
   const [assignUser,setAssignUser]=useState("");
   const [assignPlan,setAssignPlan]=useState("pro");
   const [assignDays,setAssignDays]=useState("30");
+  const [newPlanCode,setNewPlanCode]=useState("");
+  const [newPlanName,setNewPlanName]=useState("");
+  const [newPlanPrice,setNewPlanPrice]=useState("499");
+  const [newPlanDaily,setNewPlanDaily]=useState("100");
+  const [newPlanContext,setNewPlanContext]=useState("20");
+  const [newPlanOutput,setNewPlanOutput]=useState("2000");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
@@ -42,7 +48,7 @@ export function AdminAiManagement() {
     try{await api("/admin/ai/providers",{method:"POST",body:{name,base_url:base,api_key:key,models:models.split(/[\n,]/).map(x=>x.trim()).filter(Boolean)}});setKey("");await load();}
     catch(e:any){setError(e?.code||"Provider could not be saved")}finally{setBusy(false)}
   };
-  const savePlan=async(p:Plan)=>{
+  const createPlan=async()=>{\n    try{await api("/admin/ai/plans",{method:"POST",body:{code:newPlanCode,name:newPlanName,price_cents:Number(newPlanPrice),daily_requests:Number(newPlanDaily),context_messages:Number(newPlanContext),max_output_tokens:Number(newPlanOutput)}});setNewPlanCode("");setNewPlanName("");await load()}catch(e:any){setError(e?.code||"Plan could not be created")}\n  };\n  const savePlan=async(p:Plan)=>{
     try{await api("/admin/ai/plans/"+encodeURIComponent(p.code),{method:"PUT",body:{name:p.name,price_cents:p.price_cents,daily_requests:p.daily_requests,context_messages:p.context_messages,max_output_tokens:p.max_output_tokens,enabled:!!p.enabled,sort:p.sort}});await load();}
     catch(e:any){setError(e?.code||"Plan save failed")}
   };
@@ -51,7 +57,7 @@ export function AdminAiManagement() {
     try{await api("/admin/ai/coupons",{method:"POST",body:{code:couponCode,discount_type:discountType,discount_value:Number(discountValue),plan_code:couponPlan||null,max_uses:maxUses?Number(maxUses):null,starts_at:couponStart?Math.floor(new Date(couponStart).getTime()/1000):null,expires_at:couponExpiry?Math.floor(new Date(couponExpiry).getTime()/1000):null}});setCouponCode("");setCouponStart("");setCouponExpiry("");await load();}
     catch(e:any){setError(e?.code||"Coupon could not be created")}
   };
-  const testProvider=async(id:number)=>{try{const r=await api<any>("/admin/ai/providers/"+id+"/test",{method:"POST",body:{}});alert(r.ok?"Provider connected · "+r.model:"Provider test failed");}catch(e:any){setError(e?.error||e?.code||"Provider test failed")}};
+  const editProvider=async(p:Provider)=>{\n    const n=window.prompt("Provider name",p.name);if(n===null)return;\n    const b=window.prompt("API base URL",p.base_url);if(b===null)return;\n    const m=window.prompt("Models (comma-separated)",(p.models??[]).join(", "));if(m===null)return;\n    const k=window.prompt("New API key (leave blank to keep current)","");if(k===null)return;\n    try{await api("/admin/ai/providers/"+p.id,{method:"PUT",body:{name:n,base_url:b,models:m.split(",").map(x=>x.trim()).filter(Boolean),api_key:k}});await load()}catch(e:any){setError(e?.code||"Provider edit failed")}\n  };\n  const testProvider=async(id:number)=>{try{const r=await api<any>("/admin/ai/providers/"+id+"/test",{method:"POST",body:{}});alert(r.ok?"Provider connected · "+r.model:"Provider test failed");}catch(e:any){setError(e?.error||e?.code||"Provider test failed")}};
   const toggleProvider=async(p:Provider)=>{
     try{await api("/admin/ai/providers/"+p.id,{method:"PUT",body:{enabled:!p.enabled}});await load();}
     catch(e:any){setError(e?.code||"Provider update failed")}
@@ -82,12 +88,22 @@ export function AdminAiManagement() {
         {field("Models (comma or newline separated)",models,setModels,"gpt-4o-mini, gpt-4.1")}
         <button class="ai-admin-save" disabled={busy||!key.trim()} onClick={()=>void addProvider()}>{busy?"Saving…":"＋ Add provider"}</button>
       </div>
-      {providers.map(p=><article class="ai-admin-card"><h3>{p.name} <small>#{p.id}</small></h3><p>{p.base_url}</p><p>Key: {p.api_key} · Models: {(p.models??[]).join(", ")}</p><button onClick={()=>void testProvider(p.id)}>Test connection</button><button onClick={()=>void toggleProvider(p)}>{p.enabled?"Disable":"Enable"}</button><button class="danger" onClick={()=>void deleteProvider(p.id)}>Delete</button></article>)}
+      {providers.map(p=><article class="ai-admin-card"><h3>{p.name} <small>#{p.id}</small></h3><p>{p.base_url}</p><p>Key: {p.api_key} · Models: {(p.models??[]).join(", ")}</p><button onClick={()=>void editProvider(p)}>Edit</button><button onClick={()=>void testProvider(p.id)}>Test connection</button><button onClick={()=>void toggleProvider(p)}>{p.enabled?"Disable":"Enable"}</button><button class="danger" onClick={()=>void deleteProvider(p.id)}>Delete</button></article>)}
       {!providers.length?<p class="ai-muted">No AI provider configured. Add at least one provider to enable chat replies.</p>:null}
     </section>
     <section class="ai-admin-section"><h2>AI plans & usage limits</h2><p class="ai-muted">Set monthly USD prices, daily message quotas and context/output limits.</p>
+      <div class="ai-admin-card ai-admin-grid">
+        <h3>Create a custom plan</h3>
+        {field("Plan code (unique)",newPlanCode,setNewPlanCode,"business")}
+        {field("Plan name",newPlanName,setNewPlanName,"Business")}
+        {field("Monthly price (USD cents)",newPlanPrice,setNewPlanPrice,"499")}
+        {field("Messages per day",newPlanDaily,setNewPlanDaily,"100")}
+        {field("Context messages",newPlanContext,setNewPlanContext,"20")}
+        {field("Maximum output tokens",newPlanOutput,setNewPlanOutput,"2000")}
+        <button class="ai-admin-save" onClick={()=>void createPlan()}>＋ Create plan</button>
+      </div>
       {plans.map(p=><article class="ai-admin-card ai-admin-grid">
-        <h3>{p.name} · {p.code}</h3>
+        <h3>{p.name} · {p.code}</h3>\n        <label class="ai-admin-field"><span>Plan enabled</span><input type="checkbox" checked={!!p.enabled} onChange={e=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,enabled:e.currentTarget.checked?1:0}:x))}/></label>
         {field("Plan name",p.name,(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,name:v}:x)))}
         {field("Monthly price (USD cents)",String(p.price_cents),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,price_cents:Number(v)||0}:x)))}
         {field("Messages per day",String(p.daily_requests),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,daily_requests:Number(v)||1}:x)))}
