@@ -1085,6 +1085,8 @@ admin.post("/backup/import", async (c) => {
   const allowedNames = scope === "users" ? ["users"] : scope === "key-catalog" ? ["key_categories","key_platforms"] : all;
   const inputNames = Object.keys(b.tables);
   if (inputNames.some(n => !allowedNames.includes(n)) || (scope !== "full" && allowedNames.some(n => !inputNames.includes(n)))) return err(c,400,"BACKUP_SCOPE_MISMATCH");
+  // Never let an empty or incomplete "full" file erase a live database.
+  if (scope === "full" && (inputNames.length !== all.length || all.some(n => !inputNames.includes(n)))) return err(c,400,"FULL_BACKUP_INCOMPLETE");
   const totalRows = inputNames.reduce((n,k)=>n+(Array.isArray(b.tables[k])?b.tables[k].length:1_000_000),0);
   if (totalRows > 50000) return err(c,413,"BACKUP_TOO_LARGE",{maxRows:50000});
   const columns = new Map<string,string[]>();
