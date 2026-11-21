@@ -1128,3 +1128,61 @@ admin.post("/backup/import", async (c) => {
   }
   return c.json({ok:true,scope,importedTables:inputNames.length,importedRows:totalRows});
 });
+
+
+/* Campaign administration. Campaign rewards are credited to the INR wallet only after verified completion. */
+admin.get("/campaigns",async(c)=>{
+ const {results}=await c.env.DB.prepare("SELECT * FROM campaigns ORDER BY id DESC LIMIT 100").all<any>();
+ const submissions=await c.env.DB.prepare("SELECT COUNT(*) AS n FROM campaign_submissions WHERE status='pending'").first<any>();
+ return c.json({items:results.map((x:any)=>({...x,channels:JSON.parse(x.channels_json||"[]")})),pending:Number(submissions?.n||0)});
+});
+admin.post("/campaigns",async(c)=>{
+ const b=await readBody<{title:string;description?:string;type:string;reward_inr:number;channels?:any[]}>(c);
+ if(!b||!b.title?.trim()||!["channel","manual"].includes(b.type)||!Number.isFinite(Number(b.reward_inr))||Number(b.reward_inr)<0||Number(b.reward_inr)>100000)return err(c,400,"INVALID_CAMPAIGN");
+ const channels=b.type==="channel"?(Array.isArray(b.channels)?b.channels:[]):[];
+ if(b.type==="channel"&&(!channels.length||channels.length>20||channels.some(x=>!x?.chat_id||!x?.url)))return err(c,400,"INVALID_CHANNELS");
+ const now=Math.floor(Date.now()/1000);
+ const ins=await c.env.DB.prepare("INSERT INTO campaigns(title,description,type,reward_inr,channels_json,active,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,1,?6,?6) RETURNING id").bind(b.title.trim().slice(0,160),String(b.description||"").slice(0,2000),b.type,Number(b.reward_inr),JSON.stringify(channels),now).first<any>();
+ if(!ins)return err(c,500,"CAMPAIGN_CREATE_FAILED");
+ await c.env.DB.prepare("INSERT OR IGNORE INTO campaign_notice_queue(campaign_id,user_id) SELECT ?1,id FROM users WHERE can_message=1 AND banned=0").bind(ins.id).run();
+ return c.json({ok:true,id:ins.id});
+});
+admin.put("/campaigns/:id",async(c)=>{
+ const id=Number(c.req.param("id")),b=await readBody<any>(c);
+ if(!Number.isSafeInteger(id)||id<1||!b)return err(c,400,"INVALID_CAMPAIGN");
+ const old=await c.env.DB.prepare("SELECT * FROM campaigns WHERE id=?1").bind(id).first<any>();
+ if(!old)return err(c,404,"CAMPAIGN_NOT_FOUND");
+ const title=String(b.title??old.title).trim(),description=String(b.description??old.description),type=b.type??old.type,reward=Number(b.reward_inr??old.reward_inr),channels=b.channels??JSON.parse(old.channels_json||"[]"),active=b.active===undefined?old.active:(b.active?1:0);
+ if(!title||!["channel","manual"].includes(type)||!Number.isFinite(reward)||reward<0||reward>100000||!Array.isArray(channels)||channels.length>20)return err(c,400,"INVALID_CAMPAIGN");
+ await c.env.DB.prepare("UPDATE campaigns SET title=?2,description=?3,type=?4,reward_inr=?5,channels_json=?6,active=?7,updated_at=?8 WHERE id=?1").bind(id,title.slice(0,160),description.slice(0,2000),type,reward,JSON.stringify(channels),active,Math.floor(Date.now()/1000)).run();
+ if(active&&!old.active)await c.env.DB.prepare("INSERT OR IGNORE INTO campaign_notice_queue(campaign_id,user_id) SELECT ?1,id FROM users WHERE can_message=1 AND banned=0").bind(id).run();
+ return c.json({ok:true});
+});
+admin.delete("/campaigns/:id",async(c)=>{
+ const id=Number(c.req.param("id"));if(!Number.isSafeInteger(id)||id<1)return err(c,400,"INVALID_CAMPAIGN");
+ await c.env.DB.prepare("DELETE FROM campaigns WHERE id=?1").bind(id).run();return c.json({ok:true});
+});
+admin.get("/campaigns/:id/submissions",async(c)=>{
+ const id=Number(c.req.param("id"));if(!Number.isSafeInteger(id)||id<1)return err(c,400,"INVALID_CAMPAIGN");
+ const {results}=await c.env.DB.prepare("SELECT s.id,s.user_id,s.screenshot_data,s.screenshot_mime,s.status,s.created_at,u.first_name,u.username FROM campaign_submissions s LEFT JOIN users u ON u.id=s.user_id WHERE s.campaign_id=?1 ORDER BY s.id DESC LIMIT 100").bind(id).all<any>();
+ return c.json({items:results.map((x:any)=>({...x,screenshot:"data:"+x.screenshot_mime+";base64,"+x.screenshot_data,screenshot_data:undefined}))});
+});
+admin.post("/campaign-submissions/:id/review",async(c)=>{
+ const id=Number(c.req.param("id")),b=await readBody<{action:string}>(c);
+ if(!Number.isSafeInteger(id)||id<1||!b||!["approve","reject"].includes(b.action))return err(c,400,"INVALID_REVIEW");
+ const s=await c.env.DB.prepare("SELECT s.*,c.title,c.reward_inr,u.balance_inr,u.lang FROM campaign_submissions s JOIN campaigns c ON c.id=s.campaign_id JOIN users u ON u.id=s.user_id WHERE s.id=?1 AND s.status='pending'").bind(id).first<any>();
+ if(!s)return err(c,404,"SUBMISSION_NOT_PENDING");
+ const now=Math.floor(Date.now()/1000),status=b.action==="approve"?"approved":"rejected";
+ const [changed]=await c.env.DB.batch([
+  c.env.DB.prepare("UPDATE campaign_submissions SET status=?2,reviewed_at=?3,reviewed_by=?4 WHERE id=?1 AND status='pending'").bind(id,status,now,c.get("user").id),
+  ...(b.action==="approve"?[
+   c.env.DB.prepare("UPDATE users SET balance_inr=balance_inr+?2 WHERE id=?1 AND changes()=1").bind(s.user_id,s.reward_inr),
+   c.env.DB.prepare("INSERT INTO inr_ledger(user_id,delta_inr,kind,ref,note,created_at) SELECT ?1,?2,'campaign',?3,?4,?5 WHERE changes()=1").bind(s.user_id,s.reward_inr,s.campaign_id,"Approved campaign: "+s.title,now),
+   c.env.DB.prepare("INSERT OR IGNORE INTO campaign_completions(campaign_id,user_id,completed_at) SELECT campaign_id,user_id,?2 FROM campaign_submissions WHERE id=?1 AND status='approved'").bind(id,now)
+  ]:[])
+ ]);
+ if(!changed.meta.changes)return err(c,409,"ALREADY_REVIEWED");
+ const bal=await c.env.DB.prepare("SELECT balance_inr FROM users WHERE id=?1").bind(s.user_id).first<any>();
+ await tg(c.env.BOT_TOKEN,"sendMessage",{chat_id:s.user_id,text:b.action==="approve"?"🎉 Your campaign screenshot was approved!\n\nReward added: ₹"+Number(s.reward_inr).toFixed(2)+"\nNew wallet balance: ₹"+Number(bal?.balance_inr||0).toFixed(2):"Your campaign screenshot was not approved. Please review the task instructions and contact support if needed."}).catch(()=>{});
+ return c.json({ok:true,status,balance:bal?.balance_inr??0});
+});
