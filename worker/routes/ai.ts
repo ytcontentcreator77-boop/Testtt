@@ -46,6 +46,24 @@ ai.get("/models", async (c) => {
 
 ai.get("/usage", async (c) => c.json(await usage(c, await activePlan(c))));
 
+ai.get("/plans", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT code,name,price_cents,currency,daily_requests,context_messages,max_output_tokens,enabled,sort FROM ai_plans WHERE enabled=1 ORDER BY sort,id").all();
+  return c.json({ items: results, current: (await activePlan(c)).code });
+});
+
+ai.post("/coupons/validate", async (c) => {
+  const body = await c.req.json<{ code?: string; planCode?: string }>().catch(() => null);
+  const code = typeof body?.code === "string" ? body.code.trim().toUpperCase() : "";
+  const planCode = typeof body?.planCode === "string" ? body.planCode : "";
+  if (!code || !planCode) return c.json({ error: "INVALID_COUPON", code: "INVALID_COUPON" }, 400);
+  const coupon = await c.env.DB.prepare("SELECT * FROM ai_plan_coupons WHERE code=?1 COLLATE NOCASE AND active=1").bind(code).first<any>();
+  const plan = await c.env.DB.prepare("SELECT code,price_cents,currency FROM ai_plans WHERE code=?1 AND enabled=1").bind(planCode).first<any>();
+  const stamp = now();
+  if (!coupon || !plan || (coupon.plan_code && coupon.plan_code !== planCode) || (coupon.starts_at && coupon.starts_at > stamp) || (coupon.expires_at && coupon.expires_at < stamp) || (coupon.max_uses && coupon.used_count >= coupon.max_uses)) return c.json({ error: "COUPON_INVALID_OR_EXPIRED", code: "COUPON_INVALID_OR_EXPIRED" }, 400);
+  const discount = coupon.discount_type === "percent" ? Math.floor(plan.price_cents * Math.min(100,coupon.discount_value) / 100) : Math.min(plan.price_cents,coupon.discount_value);
+  return c.json({ valid: true, code, planCode, currency: plan.currency, originalCents: plan.price_cents, discountCents: discount, finalCents: Math.max(0,plan.price_cents-discount) });
+});
+
 ai.get("/chats", async (c) => {
   const before = Number(c.req.query("before") || Number.MAX_SAFE_INTEGER);
   const { results } = await c.env.DB.prepare(
