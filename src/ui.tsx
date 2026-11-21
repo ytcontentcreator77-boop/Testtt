@@ -1046,11 +1046,11 @@ export function Sheet({ title, sub, onClose, children, footer, size = "auto" }: 
 
 // ---------- navigation chrome ----------
 
-const TABS: [string, IconName, "tab.new" | "tab.orders" | "tab.wallet" | "tab.profile"][] = [
-  ["/", "plusCircle", "tab.new"],
-  ["/orders", "receipt", "tab.orders"],
-  ["/wallet", "wallet", "tab.wallet"],
-  ["/profile", "person", "tab.profile"],
+const TABS: [string, IconName, string][] = [
+  ["/", "chat", "Chat"],
+  ["/history", "receipt", "History"],
+  ["/plans", "star", "Plans"],
+  ["/profile", "person", "Profile"],
 ];
 
 /** Without :has() (old Android WebViews) CSS can't slide the floating bars away from the keyboard, so they unmount. */
@@ -1081,7 +1081,7 @@ export function TabBar() {
           }}
         >
           <Icon name={icon} size={22} stroke={path === href ? 2 : 1.8} />
-          <span>{t(key)}</span>
+          <span>{key}</span>
         </a>
       ))}
     </nav>
