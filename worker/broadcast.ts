@@ -62,7 +62,7 @@ export async function startAnnouncementBroadcast(env: Env, adminId: number, anno
   if (readBroadcast(settings.broadcast_state)) throw new Error("BROADCAST_RUNNING");
   const total = await audience(env);
   if (!total) throw new Error("NO_AUDIENCE");
-  const text = [announcement.title.trim(), announcement.description.trim()].filter(Boolean).join("\\n\\n");
+  const text = [announcement.title.trim(), announcement.description.trim()].filter(Boolean).join("\n\n");
   const content = announcement.imageUrl
     ? { kind: "photo" as const, file: announcement.imageUrl, text: text.slice(0, 1024), entities: [] }
     : { kind: "text" as const, text: text.slice(0, 4096), entities: [] };
