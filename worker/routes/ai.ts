@@ -79,7 +79,7 @@ ai.post("/plans/:code/purchase", async (c) => {
   if (coupon) statements.push(c.env.DB.prepare("UPDATE ai_plan_coupons SET used_count=used_count+1 WHERE id=?1 AND changes()=1").bind(coupon.id));
   statements.push(c.env.DB.prepare("INSERT INTO inr_ledger(user_id,delta_inr,kind,ref,note,created_at) SELECT ?1,?2,'ai_plan',?3,?4,?5 WHERE changes()=1").bind(userId,-amountInr,plan.id,"AI plan: "+plan.name,stamp));
   statements.push(c.env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active' AND EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?1 AND kind='ai_plan' AND created_at=?2 AND ref=?3)").bind(userId,stamp,plan.id));
-  statements.push(c.env.DB.prepare("undefined").bind(userId,code,stamp,plan.duration_days===0?null:stamp+Number(plan.duration_days||30)*86400,plan.id));
+  statements.push(c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?1 AND kind='ai_plan' AND created_at=?3 AND ref=?5)").bind(userId,code,stamp,plan.duration_days===0?null:stamp+Number(plan.duration_days||30)*86400,plan.id));
   if (coupon) statements.push(c.env.DB.prepare("INSERT INTO ai_coupon_redemptions(coupon_id,user_id,plan_code,discount_cents,redeemed_at) SELECT ?1,?2,?3,?4,?5 WHERE EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?2 AND plan_code=?3 AND created_at=?5) AND EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?2 AND kind='ai_plan' AND created_at=?5 AND ref=(SELECT id FROM ai_plans WHERE code=?3))").bind(coupon.id,userId,code,discount,stamp));
   const results = await c.env.DB.batch(statements);
   const walletUpdate = results[0];
