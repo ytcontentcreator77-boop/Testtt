@@ -171,7 +171,7 @@ export function AiPlans() {
     try{
       const invoice=await api<any>("/ai/plans/"+encodeURIComponent(planCode)+"/stars-invoice",{method:"POST",body:{couponCode:coupon?.planCode===planCode?code:""}});
       const status=await openInvoice(invoice.url);
-      if(status==="paid"){setCurrent(planCode);setCoupon(null);setCode("");setResult("Payment successful. Your "+planCode.toUpperCase()+" plan is active for 30 days.");}
+      if(status==="paid"){const fresh=await api<any>("/ai/plans");setCurrent(fresh.current??planCode);setWallet(Number(fresh.walletBalanceInr??wallet));setCoupon(null);setCode("");setResult("Payment successful. Your "+planCode.toUpperCase()+" plan is active for 30 days.");}
       else if(status==="failed")setError("Stars payment failed. Please try again.");
       else if(status==="pending")setResult("Payment is pending. Your plan will activate after Telegram confirms payment.");
     }catch(e:any){setError(e?.code||"Unable to create Stars invoice");}
