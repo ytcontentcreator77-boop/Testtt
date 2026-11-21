@@ -1158,6 +1158,11 @@ admin.put("/campaigns/:id",async(c)=>{
  if(!old)return err(c,404,"CAMPAIGN_NOT_FOUND");
  const title=String(b.title??old.title).trim(),description=String(b.description??old.description),type=b.type??old.type,reward=Number(b.reward_inr??old.reward_inr),channels=b.channels??JSON.parse(old.channels_json||"[]"),active=b.active===undefined?old.active:(b.active?1:0);
  if(!title||!["channel","manual"].includes(type)||!Number.isFinite(reward)||reward<0||reward>100000||!Array.isArray(channels)||channels.length>20)return err(c,400,"INVALID_CAMPAIGN");
+ if(type==="channel"){
+  if(!channels.length||channels.some((x:any)=>!x?.chat_id||!/^https?:\\/\\//i.test(String(x.url))))return err(c,400,"INVALID_CHANNELS");
+  try{const me=await tg<any>(c.env.BOT_TOKEN,"getMe",{});for(const ch of channels){const member=await tg<any>(c.env.BOT_TOKEN,"getChatMember",{chat_id:ch.chat_id,user_id:me.id});if(!["administrator","creator"].includes(member.status))return err(c,409,"BOT_NOT_ADMIN",{channel:ch.title||ch.chat_id});}}
+  catch(e){return err(c,400,"CHANNEL_ACCESS_CHECK_FAILED",{reason:(e as Error).message.slice(0,180)});}
+ }
  await c.env.DB.prepare("UPDATE campaigns SET title=?2,description=?3,type=?4,reward_inr=?5,channels_json=?6,active=?7,updated_at=?8 WHERE id=?1").bind(id,title.slice(0,160),description.slice(0,2000),type,reward,JSON.stringify(channels),active,Math.floor(Date.now()/1000)).run();
  if(active&&!old.active)await c.env.DB.prepare("INSERT INTO campaign_notice_queue(campaign_id,user_id) SELECT ?1,id FROM users WHERE can_message=1 AND banned=0 ON CONFLICT(campaign_id,user_id) DO UPDATE SET status='pending',attempts=0").bind(id).run();
  return c.json({ok:true});
