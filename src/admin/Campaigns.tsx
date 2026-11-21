@@ -1,6 +1,5 @@
 import {useEffect,useState} from "preact/hooks";
 import {api} from "../api";
-import {navigate} from "../router";
 import {toast,errText,Screen,LargeTitle,Section,BackNav} from "../ui";
 
 type Campaign={id:number;title:string;description:string;type:string;reward_inr:number;channels:any[];active:number};
