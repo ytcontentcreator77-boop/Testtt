@@ -1,6 +1,5 @@
 import { useEffect,useState } from "preact/hooks";
 import { api } from "../api";
-import { navigate } from "../router";
 import { Screen,BackNav,LargeTitle,Section,toast,errText } from "../ui";
 import { openLink } from "../tg";
 
