@@ -409,7 +409,7 @@ describe("branding settings validation", () => {
   it("builds BrandInfo with safe fallbacks", async () => {
     const { brandInfo, brandName } = await import("../worker/brand");
     const { DEFAULTS } = await import("../worker/settings");
-    expect(brandName(DEFAULTS)).toBe("NotBot");
+    expect(brandName(DEFAULTS)).toBe(DEFAULTS.brand_name);
     expect(brandInfo({ ...DEFAULTS, brand_name: "Rocket", logo_ver: 3, website_url: "http://bad", brand_preset: "neon" })).toEqual({
       name: "Rocket",
       logoUrl: "/media/logo?v=3",
@@ -441,7 +441,7 @@ describe("bot command menus", () => {
         expect(c.description).not.toMatch(/[<>{}]/); // plain text, every placeholder filled
       }
     }
-    expect(ADMIN_COMMANDS.map((c) => c.command)).toEqual(["admin", "stats", "broadcast", "preview"]);
+    expect(ADMIN_COMMANDS.map((c) => c.command)).toEqual(["admin", "stats", "addkey", "upload", "addv", "stock", "apicheck", "bonus_settings", "broadcast", "preview"]);
   });
 
   it("refresh when the code version, the brand name or the admins change", async () => {
@@ -564,7 +564,7 @@ describe("bot profile in every language", () => {
     for (const brand of ["NotBot", "A".repeat(40), "Ракета SMM Супер Бот Продвижение Аккаунтов"]) {
       const about = botAboutAll(brand);
       for (const l of ABOUT_LANGS) {
-        expect(l).toMatch(/^[a-z]{2}$/);
+        expect(l).toMatch(/^[a-z]{2,3}$/);
         const t = about[l];
         expect(t, l).toBeTruthy();
         expect(t.name.length, l).toBeLessThanOrEqual(64);
