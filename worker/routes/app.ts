@@ -162,7 +162,7 @@ async function meView(c: C, background?: (p: Promise<unknown>) => void): Promise
 app.get("/announcements/current", async (c) => {
   const u = c.get("user");
   const userId = u.id;
-  const row = await c.env.DB.prepare("SELECT a.id,a.title,a.description,a.image_url,a.button_text,a.button_enabled,a.button_url FROM announcements a WHERE a.active=1 AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.announcement_id=a.id AND d.user_id=?1) ORDER BY a.id DESC LIMIT 1").bind(userId).first<any>();
+  const row = await c.env.DB.prepare("SELECT a.id,a.title,a.description,a.image_url,a.button_text,a.button_enabled,a.button_url FROM announcements a WHERE a.active=1 AND a.id=(SELECT MAX(id) FROM announcements WHERE active=1) AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.announcement_id=a.id AND d.user_id=?1) LIMIT 1").bind(userId).first<any>();
   if (!row) return c.json({ announcement: null });
   const [stats, keys] = await Promise.all([
     c.env.DB.prepare("SELECT COUNT(*) AS orders FROM orders WHERE user_id=?1").bind(userId).first<any>(),
