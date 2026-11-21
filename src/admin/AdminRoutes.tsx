@@ -348,6 +348,14 @@ function AdminHome() {
             <>
               <div class="card pad svc-card rise">
                 <div class="head">
+                  <span class="tile md brand" aria-hidden="true"><Icon name="bot" size={20} stroke={1.8} /></span>
+                  <div><b class="t-headline">AI assistant</b><span class="t-footnote hint">Configure AI providers, API keys, plans, coupons and user access</span></div>
+                  <Chip tint label="Manage AI" onClick={() => navigate("/admin/ai")}>Open</Chip>
+                </div>
+              </div>
+
+              <div class="card pad svc-card rise">
+                <div class="head">
                   <span class="tile md brand" aria-hidden="true"><Icon name="plug" size={20} stroke={1.8} /></span>
                   <div><b class="t-headline">Key inventory</b><span class="t-footnote hint">Manage products, validity plans, manual stock and reseller API delivery</span></div>
                   <Chip tint label="Manage" onClick={() => navigate("/admin/key-store")}>Open</Chip>
