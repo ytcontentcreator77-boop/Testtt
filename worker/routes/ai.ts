@@ -46,9 +46,44 @@ ai.get("/models", async (c) => {
 
 ai.get("/usage", async (c) => c.json(await usage(c, await activePlan(c))));
 
+ai.post("/plans/:code/purchase", async (c) => {
+  const code = c.req.param("code");
+  const body = await c.req.json<{ couponCode?: string }>().catch(() => null);
+  const plan = await c.env.DB.prepare("SELECT * FROM ai_plans WHERE code=?1 AND enabled=1").bind(code).first<any>();
+  if (!plan) return c.json({ error: "PLAN_NOT_FOUND", code: "PLAN_NOT_FOUND" }, 404);
+  const couponCode = String(body?.couponCode ?? "").trim().toUpperCase();
+  let coupon:any = null;
+  let discount = 0;
+  if (couponCode) {
+    coupon = await c.env.DB.prepare("SELECT * FROM ai_plan_coupons WHERE code=?1 COLLATE NOCASE AND active=1").bind(couponCode).first<any>();
+    const stamp = now();
+    const already = coupon ? await c.env.DB.prepare("SELECT 1 FROM ai_coupon_redemptions WHERE coupon_id=?1 AND user_id=?2").bind(coupon.id,c.get("user").id).first() : null;
+    if (!coupon || (coupon.plan_code && coupon.plan_code !== code) || (coupon.starts_at && coupon.starts_at > stamp) || (coupon.expires_at && coupon.expires_at < stamp) || (coupon.max_uses && coupon.used_count >= coupon.max_uses) || already) return c.json({ error: "COUPON_INVALID_OR_EXPIRED", code: "COUPON_INVALID_OR_EXPIRED" }, 400);
+    discount = coupon.discount_type === "percent" ? Math.floor(plan.price_cents * Math.min(100,coupon.discount_value) / 100) : Math.min(plan.price_cents,coupon.discount_value);
+  }
+  const finalCents = Math.max(0,Number(plan.price_cents)-discount);
+  const rate = Number(c.get("settings").inr_per_usd || 90);
+  const amountInr = Math.ceil((finalCents/100)*rate*100)/100;
+  const userId = c.get("user").id;
+  const stamp = now();
+  const statements:any[] = [];
+  if (coupon) statements.push(c.env.DB.prepare("UPDATE ai_plan_coupons SET used_count=used_count+1 WHERE id=?1 AND active=1 AND (max_uses IS NULL OR used_count<max_uses) AND (expires_at IS NULL OR expires_at>?2) AND (starts_at IS NULL OR starts_at<=?2) AND NOT EXISTS(SELECT 1 FROM ai_coupon_redemptions WHERE coupon_id=?1 AND user_id=?3)").bind(coupon.id,stamp,userId));
+  statements.push(c.env.DB.prepare("UPDATE users SET balance_inr=balance_inr-?1 WHERE id=?2 AND balance_inr>=?1 AND (?3=0 OR changes()=1)").bind(amountInr,userId,coupon?1:0));
+  statements.push(c.env.DB.prepare("INSERT INTO inr_ledger(user_id,delta_inr,kind,ref,note,created_at) SELECT ?1,?2,'ai_plan',?3,?4,?5 WHERE changes()=1").bind(userId,-amountInr,plan.id,"AI plan: "+plan.name,stamp));
+  statements.push(c.env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active' AND changes()=1").bind(userId));
+  statements.push(c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE changes()=1").bind(userId,code,stamp,stamp+30*86400));
+  if (coupon) statements.push(c.env.DB.prepare("INSERT INTO ai_coupon_redemptions(coupon_id,user_id,plan_code,discount_cents,redeemed_at) SELECT ?1,?2,?3,?4,?5 WHERE changes()=1").bind(coupon.id,userId,code,discount,stamp));
+  const results = await c.env.DB.batch(statements);
+  const walletUpdate = results[coupon?1:0];
+  if (!walletUpdate?.meta.changes) return c.json({ error: coupon ? "COUPON_INVALID_OR_EXPIRED" : "INSUFFICIENT_WALLET_BALANCE", code: coupon ? "COUPON_INVALID_OR_EXPIRED" : "INSUFFICIENT_WALLET_BALANCE", amountInr }, coupon ? 400 : 402);
+  const user = await c.env.DB.prepare("SELECT balance_inr FROM users WHERE id=?1").bind(userId).first<{balance_inr:number}>();
+  return c.json({ ok:true, plan:code, expiresAt:stamp+30*86400, chargedInr:amountInr, discountCents:discount, balanceInr:Number(user?.balance_inr??0) });
+});
+
 ai.get("/plans", async (c) => {
   const { results } = await c.env.DB.prepare("SELECT code,name,price_cents,currency,daily_requests,context_messages,max_output_tokens,enabled,sort FROM ai_plans WHERE enabled=1 ORDER BY sort,id").all();
-  return c.json({ items: results, current: (await activePlan(c)).code });
+  const rate = Number(c.get("settings").inr_per_usd || 90);
+  return c.json({ items: results.map((p:any)=>({...p,priceInr:Math.round((p.price_cents/100)*rate*100)/100})), current: (await activePlan(c)).code, walletBalanceInr: Number(c.get("user").balance_inr ?? 0), inrPerUsd: rate });
 });
 
 ai.post("/coupons/validate", async (c) => {
@@ -59,7 +94,7 @@ ai.post("/coupons/validate", async (c) => {
   const coupon = await c.env.DB.prepare("SELECT * FROM ai_plan_coupons WHERE code=?1 COLLATE NOCASE AND active=1").bind(code).first<any>();
   const plan = await c.env.DB.prepare("SELECT code,price_cents,currency FROM ai_plans WHERE code=?1 AND enabled=1").bind(planCode).first<any>();
   const stamp = now();
-  if (!coupon || !plan || (coupon.plan_code && coupon.plan_code !== planCode) || (coupon.starts_at && coupon.starts_at > stamp) || (coupon.expires_at && coupon.expires_at < stamp) || (coupon.max_uses && coupon.used_count >= coupon.max_uses)) return c.json({ error: "COUPON_INVALID_OR_EXPIRED", code: "COUPON_INVALID_OR_EXPIRED" }, 400);
+  if (!coupon || !plan || (coupon.plan_code && coupon.plan_code !== planCode) || (coupon.starts_at && coupon.starts_at > stamp) || (coupon.expires_at && coupon.expires_at < stamp) || (coupon.max_uses && coupon.used_count >= coupon.max_uses) || await c.env.DB.prepare("SELECT 1 FROM ai_coupon_redemptions WHERE coupon_id=?1 AND user_id=?2").bind(coupon.id,c.get("user").id).first()) return c.json({ error: "COUPON_INVALID_OR_EXPIRED", code: "COUPON_INVALID_OR_EXPIRED" }, 400);
   const discount = coupon.discount_type === "percent" ? Math.floor(plan.price_cents * Math.min(100,coupon.discount_value) / 100) : Math.min(plan.price_cents,coupon.discount_value);
   return c.json({ valid: true, code, planCode, currency: plan.currency, originalCents: plan.price_cents, discountCents: discount, finalCents: Math.max(0,plan.price_cents-discount) });
 });
