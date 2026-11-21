@@ -172,6 +172,7 @@ app.get("/announcements/current", async (c) => {
   const s = c.get("settings");
   return c.json({ announcement: row, vars: {
     name: [u.first_name,u.last_name].filter(Boolean).join(" ") || "there",
+    first_name: u.first_name || "", last_name: u.last_name || "", user_id: String(userId), id: String(userId),
     username: u.username ? "@"+u.username : "",
     balance: "₹"+Number(u.balance_inr??0).toFixed(2),
     totalkeys: String(stats?.totalkeys ?? 0),
