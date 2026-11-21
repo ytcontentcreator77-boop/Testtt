@@ -10,10 +10,10 @@ import { TermsSheet, openExternalTerms } from "./Terms";
 import { BottomButtons, Screen, errText, toast } from "../ui";
 
 // Icon plate colours are fixed in both themes (spec §5.3): sky/link, lime/star, pink/bell.
-const FEATURES: [IconName, string, "welcome.f1" | "welcome.f2" | "welcome.f3"][] = [
-  ["link", "var(--sky)", "welcome.f1"],
-  ["star", "var(--lime)", "welcome.f2"],
-  ["bell", "var(--pink)", "welcome.f3"],
+const FEATURES: [IconName, string, string][] = [
+  ["chat", "var(--sky)", "Chat with powerful AI models"],
+  ["clock", "var(--lime)", "Save and search your conversations"],
+  ["star", "var(--pink)", "Choose a plan that fits your needs"],
 ];
 
 /** Shown until the terms are accepted: what the app does, in three lines, and one Continue. */
