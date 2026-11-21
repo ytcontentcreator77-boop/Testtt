@@ -433,7 +433,7 @@ describe("bot command menus", () => {
     const { LANGS } = await import("../shared/types");
     for (const l of LANGS) {
       const cmds = userCommands(l);
-      expect(cmds.map((c) => c.command)).toEqual(["start", "orders", "wallet", "language", "help"]);
+      expect(cmds.map((c) => c.command)).toEqual(["start", "new", "history", "plans", "ask", "keys", "wallet", "bonus", "coupon", "language", "help"]);
       for (const c of [...cmds, ...ADMIN_COMMANDS]) {
         expect(c.command).toMatch(/^[a-z0-9_]{1,32}$/);
         expect(c.description.length).toBeGreaterThan(0);
