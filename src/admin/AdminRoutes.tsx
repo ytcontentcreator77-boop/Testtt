@@ -2029,6 +2029,12 @@ interface AdminSettingsData {
   min_topup_stars: number;
   max_topup_stars: number;
   support_username: string;
+  howto_title: string;
+  howto_description: string;
+  howto_youtube_url: string;
+  howto_tiktok_url: string;
+  howto_video_url: string;
+  howto_fallback_url: string;
   channel_url: string;
   channel_id: string;
   channel_gate: number;
@@ -2232,6 +2238,17 @@ function AdminSettings() {
                   />
                 </Num>
               </Kv>
+            </dl>
+          </Section>
+
+          <Section header="How to use this bot" footer="Add tutorial links. YouTube and direct MP4 videos can play inside the Mini App; unsupported links open externally.">
+            <dl class="card">
+              <Kv label="Page title"><input value={s.howto_title} onInput={e=>set("howto_title",e.currentTarget.value)}/></Kv>
+              <Kv label="Introduction"><textarea rows={3} value={s.howto_description} onInput={e=>set("howto_description",e.currentTarget.value)}/></Kv>
+              <Kv label="YouTube video URL"><input dir="ltr" value={s.howto_youtube_url} placeholder="https://youtu.be/…" onInput={e=>set("howto_youtube_url",e.currentTarget.value.trim())}/></Kv>
+              <Kv label="TikTok video URL"><input dir="ltr" value={s.howto_tiktok_url} placeholder="https://www.tiktok.com/…" onInput={e=>set("howto_tiktok_url",e.currentTarget.value.trim())}/></Kv>
+              <Kv label="Other video URL (MP4)"><input dir="ltr" value={s.howto_video_url} placeholder="https://example.com/tutorial.mp4" onInput={e=>set("howto_video_url",e.currentTarget.value.trim())}/></Kv>
+              <Kv label="Fallback / support link"><input dir="ltr" value={s.howto_fallback_url} placeholder="https://t.me/your_support" onInput={e=>set("howto_fallback_url",e.currentTarget.value.trim())}/></Kv>
             </dl>
           </Section>
 
