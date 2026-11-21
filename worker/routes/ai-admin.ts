@@ -44,6 +44,19 @@ aiAdmin.get("/ai/plans", async (c) => {
   const { results } = await c.env.DB.prepare("SELECT * FROM ai_plans ORDER BY sort,id").all();
   return c.json({ items: results });
 });
+
+aiAdmin.post("/ai/plans", async (c) => {
+  const b = await c.req.json<any>().catch(()=>null);
+  const code = String(b?.code??"").trim().toLowerCase();
+  const name = String(b?.name??"").trim();
+  const price = Number(b?.price_cents??0), daily = Number(b?.daily_requests??20), context = Number(b?.context_messages??12), output = Number(b?.max_output_tokens??1200);
+  if (!/^[a-z0-9_-]{2,32}$/.test(code) || !name || ![price,daily,context,output].every(Number.isFinite) || price<0 || daily<1 || context<2 || output<64) return c.json({error:"INVALID_PLAN",code:"INVALID_PLAN"},400);
+  try {
+    await c.env.DB.prepare("INSERT INTO ai_plans(code,name,price_cents,currency,daily_requests,context_messages,max_output_tokens,enabled,sort,updated_at) VALUES(?1,?2,?3,'USD',?4,?5,?6,1,?7,?8)")
+      .bind(code,name.slice(0,80),Math.floor(price),Math.floor(daily),Math.floor(context),Math.floor(output),Number(b.sort)||100,Math.floor(Date.now()/1000)).run();
+    return c.json({ok:true,code});
+  } catch { return c.json({error:"PLAN_CODE_EXISTS",code:"PLAN_CODE_EXISTS"},409); }
+});
 aiAdmin.put("/ai/plans/:code", async (c) => {
   const code = c.req.param("code");
   const b = await c.req.json<any>().catch(() => null);
