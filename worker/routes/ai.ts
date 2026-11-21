@@ -17,15 +17,15 @@ async function activePlan(c: any): Promise<PlanRow> {
      FROM ai_user_plans s JOIN ai_plans p ON p.code=s.plan_code
      WHERE s.user_id=?1 AND s.status='active' AND (s.ends_at IS NULL OR s.ends_at>?2) AND p.enabled=1
      ORDER BY s.starts_at DESC,s.id DESC LIMIT 1`,
-  ).bind(userId, now()).first<PlanRow>();
+  ).bind(userId, now()).first() as PlanRow | null;
   if (sub) return sub;
-  const free = await c.env.DB.prepare("SELECT code,name,daily_requests,context_messages,max_output_tokens FROM ai_plans WHERE code='free' AND enabled=1").first<PlanRow>();
+  const free = await c.env.DB.prepare("SELECT code,name,daily_requests,context_messages,max_output_tokens FROM ai_plans WHERE code='free' AND enabled=1").first() as PlanRow | null;
   return free ?? { code: "free", name: "Free", daily_requests: 20, context_messages: 12, max_output_tokens: 1200 };
 }
 
 async function usage(c: any, plan: PlanRow) {
   const row = await c.env.DB.prepare("SELECT requests,input_tokens,output_tokens FROM ai_usage WHERE user_id=?1 AND day=?2")
-    .bind(c.get("user").id, dayKey()).first<{ requests: number; input_tokens: number; output_tokens: number }>();
+    .bind(c.get("user").id, dayKey()).first() as { requests: number; input_tokens: number; output_tokens: number } | null;
   return { plan: { code: plan.code, name: plan.name, dailyRequests: plan.daily_requests, contextMessages: plan.context_messages, maxOutputTokens: plan.max_output_tokens }, requests: row?.requests ?? 0, remaining: Math.max(0, plan.daily_requests - (row?.requests ?? 0)), inputTokens: row?.input_tokens ?? 0, outputTokens: row?.output_tokens ?? 0, day: dayKey() };
 }
 
