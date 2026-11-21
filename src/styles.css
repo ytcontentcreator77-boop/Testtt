@@ -1089,3 +1089,40 @@ a.btn { text-decoration: none; color: var(--on-brand); }
 @keyframes announcementFade{from{opacity:0}to{opacity:1}}
 @keyframes announcementPop{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(prefers-reduced-motion:reduce){.announcement-backdrop,.announcement-modal{animation:none}}
+
+
+/* Professional wallet funding flow */
+.funds-page{display:grid;gap:18px;padding-bottom:24px}
+.funds-heading{padding:4px 2px 0}
+.funds-kicker{display:inline-block;margin:8px 0 2px;color:var(--accent);font-size:10px;font-weight:900;letter-spacing:.16em}
+.funds-amount-card,.funds-payment-card{padding:17px;border:1px solid var(--sep);border-radius:22px;background:var(--card);box-shadow:0 12px 32px rgba(20,30,60,.055)}
+.funds-card-label,.funds-payment-head{display:flex;align-items:center;gap:11px}
+.funds-coin,.funds-method-icon,.funds-payment-icon{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:14px;background:color-mix(in srgb,var(--accent) 12%,var(--card));color:var(--accent);font-size:21px;font-weight:900}
+.funds-card-label>span:last-child,.funds-method-copy,.funds-payment-head>span:last-child{display:grid;gap:3px}
+.funds-card-label b,.funds-method-copy b,.funds-payment-head b{font-size:14px}
+.funds-card-label small,.funds-method-copy small,.funds-payment-head small{font-size:11px;color:var(--muted);line-height:1.4}
+.funds-amount-input{display:flex;align-items:center;gap:9px;margin:18px 0 14px;padding:13px 14px;border:1.5px solid var(--accent);border-radius:16px;background:var(--bg);color:var(--text)}
+.funds-amount-input>span{font-size:25px;font-weight:850;color:var(--muted)}
+.funds-amount-input input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font:800 30px/1.2 var(--num-font);caret-color:var(--accent)}
+.funds-presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.funds-presets button{padding:11px 4px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);font-size:12px;font-weight:800}
+.funds-presets button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 11%,var(--card));color:var(--accent)}
+.funds-hint{display:block;margin-top:12px;color:var(--muted);font-size:10px}
+.funds-method-list{display:grid;gap:9px}
+.funds-method{display:flex;align-items:center;gap:11px;width:100%;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-align:left}
+.funds-method.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:color-mix(in srgb,var(--accent) 5%,var(--card))}
+.funds-method-copy{flex:1;min-width:0}
+.funds-method-copy small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.funds-method-radio{display:grid;place-items:center;width:23px;height:23px;border:1.5px solid var(--line);border-radius:50%;color:white;font-size:13px;font-weight:900}
+.funds-method.selected .funds-method-radio{background:var(--accent);border-color:var(--accent)}
+.funds-payment-card{display:grid;gap:12px}
+.funds-payment-card>p{margin:0;color:var(--muted);font-size:12px;line-height:1.55}
+.funds-field-label{display:grid;gap:7px;font-size:12px;font-weight:750}
+.funds-text-input{width:100%;box-sizing:border-box;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);font:inherit;outline:none}
+.funds-text-input:focus{border-color:var(--accent)}
+.funds-submit{width:100%;min-height:49px;padding:13px;border:0;border-radius:14px;background:var(--accent);color:white;font:800 14px/1.2 var(--font)}
+.funds-submit:disabled{opacity:.45}
+.funds-empty-method{padding:16px;border:1px dashed var(--line);border-radius:15px;color:var(--muted);font-size:12px;text-align:center}
+/* Keep announcement editor text readable in the admin panel. */
+.announcement-editor input:not([type=checkbox]),.announcement-editor textarea{color:var(--fg)!important;background:var(--bg)!important;caret-color:var(--accent)!important;-webkit-text-fill-color:var(--fg)!important}
+.announcement-editor textarea::placeholder,.announcement-editor input::placeholder{color:var(--muted)!important;opacity:1}
