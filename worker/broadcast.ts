@@ -503,7 +503,7 @@ async function editCard(env: Env, st: BroadcastState, v: View): Promise<void> {
 }
 
 interface Target {
-  id: number; lang: string | null; language_code: string | null; first_name: string | null;
+  id: number; lang: string | null; language_code: string | null; first_name: string | null; last_name?: string | null;
   username?: string | null; balance_inr?: number; created_at?: number; total_orders?: number; total_keys?: number;
 }
 
@@ -519,7 +519,7 @@ async function sendOne(env: Env, b: BroadcastState, s: Settings, u: Target, plai
   const {results: latest} = await env.DB.prepare(`SELECT delivered_key,product_name,expires_at,created_at FROM orders WHERE user_id=?1 AND delivered_key IS NOT NULL ORDER BY id DESC LIMIT 3`).bind(u.id).all<any>();
   const newest = latest[0];
   const vars: Record<string,string> = {
-    name: u.first_name?.trim() || "there", username: u.username ? `@${u.username}` : (u.first_name?.trim() || "there"),
+    name: [u.first_name,u.last_name].filter(Boolean).join(" ").trim() || "there", first_name: u.first_name?.trim() || "", last_name: u.last_name?.trim() || "", user_id: String(u.id), id: String(u.id), username: u.username ? `@${u.username}` : (u.first_name?.trim() || "there"),
     balance: `₹${Number(u.balance_inr ?? 0).toFixed(2)}`, totalkeys: String(u.total_keys ?? 0),
     key_1: latest[0]?.delivered_key ?? "", key_2: latest[1]?.delivered_key ?? "", key_3: latest[2]?.delivered_key ?? "",
     product: newest?.product_name ?? "", expiry: newest?.expires_at ? new Date(Number(newest.expires_at)*1000).toLocaleDateString("en-GB") : "",
@@ -540,7 +540,7 @@ export async function broadcastTick(env: Env): Promise<void> {
   const t = now();
   if (!b || s.sync_state || !isSending(b, t)) return;
   const { results } = await env.DB.prepare(
-    `SELECT u.id,u.lang,u.language_code,u.first_name,u.username,u.balance_inr,u.created_at,
+    `SELECT u.id,u.lang,u.language_code,u.first_name,u.last_name,u.username,u.balance_inr,u.created_at,
        (SELECT COUNT(*) FROM orders o WHERE o.user_id=u.id) AS total_orders,
        (SELECT COUNT(*) FROM orders o WHERE o.user_id=u.id AND o.delivered_key IS NOT NULL) AS total_keys
        FROM users u WHERE u.can_message=1 AND u.banned=0 AND u.id>?1 ORDER BY u.id LIMIT ${BROADCAST_BATCH}`,
