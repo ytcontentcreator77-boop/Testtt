@@ -81,7 +81,7 @@ ai.post("/plans/:code/purchase", async (c) => {
   statements.push(c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?1 AND kind='ai_plan' AND created_at=?3 AND ref=?5)").bind(userId,code,stamp,stamp+30*86400,plan.id));
   if (coupon) statements.push(c.env.DB.prepare("INSERT INTO ai_coupon_redemptions(coupon_id,user_id,plan_code,discount_cents,redeemed_at) SELECT ?1,?2,?3,?4,?5 WHERE EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?2 AND plan_code=?3 AND created_at=?5) AND EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?2 AND kind='ai_plan' AND created_at=?5 AND ref=(SELECT id FROM ai_plans WHERE code=?3))").bind(coupon.id,userId,code,discount,stamp));
   const results = await c.env.DB.batch(statements);
-  const walletUpdate = results[coupon?1:0];
+  const walletUpdate = results[0];
   if (!walletUpdate?.meta.changes) {
     const current = await c.env.DB.prepare("SELECT balance_inr FROM users WHERE id=?1").bind(userId).first<{balance_inr:number}>();
     if (Number(current?.balance_inr ?? 0) < amountInr) return c.json({ error:"INSUFFICIENT_WALLET_BALANCE",code:"INSUFFICIENT_WALLET_BALANCE",amountInr },402);
