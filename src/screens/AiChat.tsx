@@ -195,10 +195,10 @@ export function AiPlans() {
     <div class="ai-coupon-entry"><input value={code} onInput={(e)=>{setCode((e.currentTarget as HTMLInputElement).value.toUpperCase());setCoupon(null)}} placeholder="Have a plan coupon?"/><span>Apply it on the plan you want to activate.</span></div>
 
     <section class="ai-plan-compare"><h2>Free vs Pro</h2><p>Compare what you get before upgrading.</p><div class="ai-compare-grid">
-      <article><b>FREE</b><strong>{plans.find(x=>x.code==="free")?.daily_requests??20} messages/day</strong><span>{plans.find(x=>x.code==="free")?.context_messages??12} chat context</span><span>{(plans.find(x=>x.code==="free")?.max_output_tokens??1200).toLocaleString()} max output tokens</span><span>Standard access</span></article>
-      <article class="featured"><b>PRO</b><strong>{plans.find(x=>x.code==="pro")?.daily_requests??500} messages/day</strong><span>{plans.find(x=>x.code==="pro")?.context_messages??40} chat context</span><span>{(plans.find(x=>x.code==="pro")?.max_output_tokens??4000).toLocaleString()} max output tokens</span><span>Priority AI access · 30 days</span></article>
+      <article><b>FREE</b><strong>{plans.find(x=>x.code==="free")?.daily_requests??20} messages/day</strong><span>{plans.find(x=>x.code==="free")?.context_messages??12} chat context</span><span>{(plans.find(x=>x.code==="free")?.max_output_tokens??1200).toLocaleString()} max output tokens</span><span>Standard access · {plans.find(x=>x.code==="free")?.duration_days===0?"Unlimited":(plans.find(x=>x.code==="free")?.duration_days??30)+" days"}</span></article>
+      <article class="featured"><b>PRO</b><strong>{plans.find(x=>x.code==="pro")?.daily_requests??500} messages/day</strong><span>{plans.find(x=>x.code==="pro")?.context_messages??40} chat context</span><span>{(plans.find(x=>x.code==="pro")?.max_output_tokens??4000).toLocaleString()} max output tokens</span><span>Priority AI access · {plans.find(x=>x.code==="pro")?.duration_days===0?"Unlimited":(plans.find(x=>x.code==="pro")?.duration_days??30)+" days"}</span></article>
     </div></section>
-    {plans.map((p)=><article class="ai-plan-card"><div class="ai-plan-head"><div><span>{p.code.toUpperCase()}</span><h2>{p.name}</h2></div><strong>{p.price_cents===0?"Free":`$${(p.price_cents/100).toFixed(2)}`}<small>/ 30 days</small></strong></div>
+    {plans.map((p)=><article class="ai-plan-card"><div class="ai-plan-head"><div><span>{p.code.toUpperCase()}</span><h2>{p.name}</h2></div><strong>{p.price_cents===0?"Free":`$${(p.price_cents/100).toFixed(2)}`}<small>/ {p.duration_days===0?"unlimited":p.duration_days+" days"}</small></strong></div>
       <ul><li>{p.daily_requests.toLocaleString()} messages per day</li><li>{p.context_messages} messages of conversation context</li><li>Up to {p.max_output_tokens.toLocaleString()} output tokens</li></ul>
       <div class="ai-plan-inr">Wallet price: ₹{Number(coupon?.planCode===p.code && p.price_cents ? p.priceInr*coupon.finalCents/p.price_cents : p.priceInr??0).toFixed(2)}</div>
       {coupon?.planCode===p.code?<div class="ai-discount">Coupon applied · Save ${(coupon.discountCents/100).toFixed(2)} · New price ${(coupon.finalCents/100).toFixed(2)}</div>:null}
@@ -207,6 +207,6 @@ export function AiPlans() {
     </article>)}
     {result?<p class="ai-success">{result}</p>:null}
     {error?<p class="ai-error">{error}</p>:null}
-    <p class="ai-muted">Paid AI plans can be purchased securely with Telegram Stars. Pro can also be arranged directly with the administrator. All paid plans last 30 days.</p>
+    <p class="ai-muted">Paid AI plans can be purchased securely with Telegram Stars. Pro can also be arranged directly with the administrator. Plan duration is set by the administrator.</p>
   </main>;
 }
