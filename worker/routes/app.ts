@@ -159,6 +159,18 @@ async function meView(c: C, background?: (p: Promise<unknown>) => void): Promise
   };
 }
 
+app.get("/announcements/current", async (c) => {
+  const userId = c.get("user").id;
+  const row = await c.env.DB.prepare("SELECT a.id,a.title,a.description,a.image_url,a.button_text,a.button_enabled,a.button_url FROM announcements a WHERE a.active=1 AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.announcement_id=a.id AND d.user_id=?1) ORDER BY a.id DESC LIMIT 1").bind(userId).first<any>();
+  return c.json({ announcement: row ?? null });
+});
+app.post("/announcements/:id/dismiss", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id <= 0) return err(c, 400, "INVALID_ID");
+  await c.env.DB.prepare("INSERT OR IGNORE INTO announcement_dismissals(user_id,announcement_id,dismissed_at) SELECT ?1,id,?3 FROM announcements WHERE id=?2").bind(c.get("user").id,id,Math.floor(Date.now()/1000)).run();
+  return c.json({ ok: true });
+});
+
 app.get("/how-to-use", (c) => {
   const s = c.get("settings");
   return c.json({
