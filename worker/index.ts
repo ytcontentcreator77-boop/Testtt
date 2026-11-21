@@ -20,6 +20,7 @@ import { commandsTick } from "./commands";
 import { ensureSchema } from "./migrate";
 import { cleanupRateLimits } from "./rateLimit";
 import { stockCheckTick, apiBalanceTick } from "./keyHealth";
+import { campaignNoticeTick } from "./campaigns";
 
 api.route("/admin", admin);
 
@@ -112,7 +113,7 @@ export default {
     const minute = new Date(controller.scheduledTime).getUTCMinutes();
     // Each run must stay under the free plan's 10 ms CPU. Provider order status is polled in small batches;
     // the bot and referral housekeeping jobs are scheduled separately.
-    const jobs: Promise<unknown>[] = [commandsTick(env), broadcastTick(env), stockCheckTick(env), apiBalanceTick(env)];
+    const jobs: Promise<unknown>[] = [commandsTick(env), broadcastTick(env), stockCheckTick(env), apiBalanceTick(env), campaignNoticeTick(env)];
     if (minute % 5 === 1) jobs.push(retryReferrals(env));
     // Hourly housekeeping (minute :07) so the every-minute run stays light
     if (minute === 7) jobs.push(cleanupWebhookEvents(env), cleanupPendingPayments(env), cleanupRateLimits(env));
