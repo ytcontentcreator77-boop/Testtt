@@ -108,6 +108,9 @@ async function onCallback(env: Env, q: any): Promise<void> {
     const text = botText(pickLang((await env.DB.prepare("SELECT lang FROM users WHERE id=?1").bind(q.from.id).first<{lang:string|null}>())?.lang??q.from.language_code),shown?"keyDeliveredRevealed":"keyDeliveredMasked",{product:safe(order.product_name),plan:safe(order.plan_duration),id:String(order.id),masked_key:safe(masked),full_key:safe(key),amount:Number(order.price_inr).toFixed(2),balance:"—"});
     const keyboard:any[][] = [[{text:shown?"🙈 Hide Key":"👁 Show Key",callback_data:`key:${shown?"hide":"show"}:${order.id}`}],[{text:"📋 Copy Key",copy_text:{text:key}}]];
     if(order.setup_file_url) keyboard.push([{text:"📥 Download Setup",url:order.setup_file_url}]);
+    const platformVideo=await env.DB.prepare("SELECT id,setup_video_file_id,setup_video_url FROM key_platforms WHERE slug=?1 COLLATE NOCASE").bind(order.platform??"").first<any>();
+    const botUsername=String((await getSettings(env)).bot_username||"").replace(/^@/,"");
+    if(platformVideo&&(platformVideo.setup_video_file_id||platformVideo.setup_video_url)&&botUsername)keyboard.push([{text:"🎬 Setup Video",url:"https://t.me/"+botUsername+"?start=video"+platformVideo.id}]);
     await tg(env.BOT_TOKEN,"editMessageText",{chat_id:q.message.chat.id,message_id:q.message.message_id,text,parse_mode:"HTML",reply_markup:{inline_keyboard:keyboard}});
     return void (await tg(env.BOT_TOKEN,"answerCallbackQuery",{callback_query_id:q.id}));
   }
@@ -177,8 +180,19 @@ async function handle(env: Env, u: any): Promise<void> {
     return;
   }
   const proofCaption=String(m.caption??"");const proofMatch=/^\/proof\s+(\d+)/i.exec(proofCaption);if(proofMatch&&(m.photo?.length||m.document?.file_id)){const fileId=m.photo?.[m.photo.length-1]?.file_id??m.document?.file_id;const id=Number(proofMatch[1]);const r=await env.DB.prepare("UPDATE manual_payments SET proof_file_id=?3 WHERE id=?1 AND user_id=?2 AND status='pending'").bind(id,from.id,fileId).run();await tg(env.BOT_TOKEN,"sendMessage",{chat_id:from.id,text:r.meta.changes?"✅ Payment proof attached. Your payment is waiting for admin review.":"Pending payment not found. Please check the payment ID."});if(r.meta.changes){const p=await env.DB.prepare("SELECT amount_inr,method_name,utr_ref FROM manual_payments WHERE id=?1").bind(id).first<any>();for(const adminId of ownerIds(env,await getSettings(env))){await tg(env.BOT_TOKEN,"sendMessage",{chat_id:adminId,text:`📎 <b>PAYMENT PROOF RECEIVED</b>\nPayment #${id} · User ${from.id}\n${p?.method_name} · ₹${Number(p?.amount_inr??0).toFixed(2)}\nUTR: ${p?.utr_ref??"—"}`,parse_mode:"HTML",reply_markup:{inline_keyboard:[[{text:"✅ Approve",callback_data:`pay:approve:${id}`},{text:"❌ Reject",callback_data:`pay:reject:${id}`}]]}});if(m.photo?.length)await tg(env.BOT_TOKEN,"sendPhoto",{chat_id:adminId,photo:fileId,caption:`Payment proof #${id}`});else if(m.document?.file_id)await tg(env.BOT_TOKEN,"sendDocument",{chat_id:adminId,document:fileId,caption:`Payment proof #${id}`});}}return;}
-  // Product delivery assets: attach any Telegram media or text to a product's public UID.
+  // Platform setup videos: send/reply to a video with "/addv PLATFORM_SLUG".
   if (isOwner(env, await getSettings(env), from.id)) {
+    const setupCaption=String(m.caption??m.text??"").trim();
+    const addVideo=/^\/addv\s+([a-z0-9_-]+)$/i.exec(setupCaption);
+    const setupVideo=m.video??m.reply_to_message?.video;
+    if(addVideo&&setupVideo){
+      const platform=await env.DB.prepare("SELECT id,name FROM key_platforms WHERE slug=?1 COLLATE NOCASE").bind(addVideo[1]).first<any>();
+      if(!platform){await tg(env.BOT_TOKEN,"sendMessage",{chat_id:from.id,text:"Platform not found. Use the platform slug shown in Admin → Key products & stock."});return;}
+      await env.DB.prepare("UPDATE key_platforms SET setup_video_file_id=?2,setup_video_url=NULL WHERE id=?1").bind(platform.id,setupVideo.file_id).run();
+      const username=String((await getSettings(env)).bot_username||"").replace(/^@/,"");
+      await tg(env.BOT_TOKEN,"sendMessage",{chat_id:from.id,text:"✅ Setup video saved for "+platform.name+"."+(username?"\nLink: https://t.me/"+username+"?start=video"+platform.id:"\nSet the bot username to generate its deep link.")});
+      return;
+    }
     const bodyText=String(m.text??m.caption??"").trim();
     const uploadMatch=/^\/upload\s+(P[0-9A-Z_-]+)(?:\s+([\s\S]*))?$/i.exec(bodyText);
     const hasMedia=!!(m.document||m.photo?.length||m.video||m.animation||m.audio||m.voice||m.video_note||m.sticker);
@@ -214,6 +228,17 @@ async function handle(env: Env, u: any): Promise<void> {
 
   // First-admin claim: "/start claim_<code>" (the setup link) or "/claim <code>". Wrong codes look like any other message.
   const arg = text.split(/\s+/)[1] ?? "";
+  if(cmd==="addv"&&isOwner(env,await getSettings(env),from.id)){
+    const parts=text.split(/\s+/);const slug=parts[1]??"";const videoUrl=parts.slice(2).join(" ").trim();
+    if(!slug)return void(await send("Use <code>/addv PLATFORM_SLUG https://video-link</code>, or reply to a Telegram video with <code>/addv PLATFORM_SLUG</code>."));
+    const platform=await env.DB.prepare("SELECT id,name FROM key_platforms WHERE slug=?1 COLLATE NOCASE").bind(slug).first<any>();
+    if(!platform)return void(await send("Platform not found. Check the platform slug in Admin → Key products & stock."));
+    if(!videoUrl)return void(await send("Send a video with caption <code>/addv "+slug+"</code>, or reply to a video with that command."));
+    if(!/^https?:\/\//i.test(videoUrl))return void(await send("Video URL must start with https:// or http://"));
+    await env.DB.prepare("UPDATE key_platforms SET setup_video_url=?2,setup_video_file_id=NULL WHERE id=?1").bind(platform.id,videoUrl.slice(0,1000)).run();
+    const username=String((await getSettings(env)).bot_username||"").replace(/^@/,"");
+    return void(await send("✅ Setup video link saved for <b>"+platform.name+"</b>."+(username?"\nhttps://t.me/"+username+"?start=video"+platform.id:"\nSet the bot username in setup to generate its deep link.")));
+  }
   if (cmd === "claim" || (cmd === "start" && arg.startsWith("claim_"))) {
     const code = cmd === "claim" ? arg : arg.slice("claim_".length);
     if (code && (await tryClaim(env, from.id, code))) {
@@ -224,6 +249,14 @@ async function handle(env: Env, u: any): Promise<void> {
   // /paysupport stays answered (Telegram requires it for Stars) but isn't in the command menu.
   if (cmd === "paysupport" || cmd === "support") return void (await sendHelp(env, from.id, lang, "paysupport"));
   if (cmd === "language") return void (await pickLanguage());
+  if(cmd==="start"&&/^video\d+$/.test(arg)){
+    const platformId=Number(arg.slice(5));
+    const video=await env.DB.prepare("SELECT name,setup_video_file_id,setup_video_url FROM key_platforms WHERE id=?1 AND enabled=1").bind(platformId).first<any>();
+    if(!video||(!video.setup_video_file_id&&!video.setup_video_url))return;
+    if(video.setup_video_file_id)await tg(env.BOT_TOKEN,"sendVideo",{chat_id:from.id,video:video.setup_video_file_id,caption:"🎬 "+video.name+" setup tutorial"});
+    else await tg(env.BOT_TOKEN,"sendMessage",{chat_id:from.id,text:"🎬 "+video.name+" setup tutorial",reply_markup:{inline_keyboard:[[{text:"▶️ Watch setup video",url:video.setup_video_url}]]}});
+    return;
+  }
   if (cmd === "start") {
     const ref = parseRef(text.split(/\s+/)[1]);
     if (ref) await attachReferral(env, await getSettings(env), from.id, ref);
@@ -236,9 +269,10 @@ async function handle(env: Env, u: any): Promise<void> {
     return void (await (user?.lang ? sendWelcome(env, from.id, lang, from.first_name) : pickLanguage()));
   }
   if (cmd === "orders" || cmd === "keys") {
-    const {results}=await env.DB.prepare("SELECT id,product_name,plan_duration,delivered_key,price_inr,setup_file_url FROM orders WHERE user_id=?1 AND delivered_key IS NOT NULL ORDER BY id DESC LIMIT 10").bind(from.id).all<any>();
+    const {results}=await env.DB.prepare("SELECT id,product_name,plan_duration,delivered_key,price_inr,setup_file_url,platform FROM orders WHERE user_id=?1 AND delivered_key IS NOT NULL ORDER BY id DESC LIMIT 10").bind(from.id).all<any>();
     if(!results.length)return void(await send("🔑 You have no purchased keys yet. Open the store to browse products."));
-    for(const o of results){const key=String(o.delivered_key);const masked=key.length<8?"••••••":`${key.slice(0,4)}-${"•".repeat(Math.min(12,Math.max(4,key.length-4)))}`;const buttons:any[][]=[[{text:"👁 Show Key",callback_data:`key:show:${o.id}`}],[{text:"📋 Copy Key",copy_text:{text:key}}]];if(o.setup_file_url)buttons.push([{text:"📥 Download Setup",url:o.setup_file_url}]);await send(`🔑 <b>${o.product_name}</b>\n📅 ${o.plan_duration} · #${o.id}\n🗝 <code>${masked}</code>\n💰 ₹${Number(o.price_inr).toFixed(2)}`,{inline_keyboard:buttons});}
+    const botUsername=String((await getSettings(env)).bot_username||"").replace(/^@/,"");
+    for(const o of results){const key=String(o.delivered_key);const masked=key.length<8?"••••••":`${key.slice(0,4)}-${"•".repeat(Math.min(12,Math.max(4,key.length-4)))}`;const buttons:any[][]=[[{text:"👁 Show Key",callback_data:`key:show:${o.id}`}],[{text:"📋 Copy Key",copy_text:{text:key}}]];if(o.setup_file_url)buttons.push([{text:"📥 Download Setup",url:o.setup_file_url}]);const pv=await env.DB.prepare("SELECT id,setup_video_file_id,setup_video_url FROM key_platforms WHERE slug=?1 COLLATE NOCASE").bind(o.platform??"").first<any>();if(pv&&(pv.setup_video_file_id||pv.setup_video_url)&&botUsername)buttons.push([{text:"🎬 Setup Video",url:"https://t.me/"+botUsername+"?start=video"+pv.id}]);await send(`🔑 <b>${o.product_name}</b>\n📅 ${o.plan_duration} · #${o.id}\n🗝 <code>${masked}</code>\n💰 ₹${Number(o.price_inr).toFixed(2)}`,{inline_keyboard:buttons});}
     return;
   }
   if (cmd === "wallet" || cmd === "balance") {
