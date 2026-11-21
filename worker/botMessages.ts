@@ -40,7 +40,7 @@ export async function sendWelcome(env: Env, chatId: number, lang: Lang, name: st
   const s = await getSettings(env);
   const open = openButton(lang, s);
   const reply_markup = open ? { inline_keyboard: [[open]] } : undefined;
-  const caption = hasCustomBotMessage("welcome") ? botText(lang, "welcome", { name: name || "there" }) : s.welcome_text.trim() ? customWelcome(s.welcome_text, name || "there", brandName(s)) : botText(lang, "welcome", { name: name || "there" });
+  const caption = hasCustomBotMessage("welcome") ? botText(lang, "welcome", { name: name || "there" }) : s.welcome_text.trim() ? customWelcome(s.welcome_text, name || "there", brandName(s)) : `✨ <b>Welcome, ${escapeHtml(name || "there")}!</b>\\n\\nI am your AI assistant. Ask me questions, get help with coding, writing, learning, planning and everyday tasks. Your conversations are saved automatically.\\n\\nUse /new for a fresh chat, /history for recent conversations, or open the Mini App for the full chat experience.`;
   const url = s.app_url && s.banner_ver > 0 ? `${s.app_url}/media/banner?v=${s.banner_ver}` : "";
   if (url) {
     const [cachedUrl, fileId] = (s.welcome_photo || "|").split("|");
@@ -71,7 +71,7 @@ export async function sendHelp(env: Env, chatId: number, lang: Lang, key: "help"
   const rows = [...(open ? [[open]] : []), ...(terms ? [[terms]] : [])];
   await tg(env.BOT_TOKEN, "sendMessage", {
     chat_id: chatId,
-    text: botText(lang, key, { support: supportHandle(s) }),
+    text: key === "help" ? `🤖 <b>AI Assistant</b>\\n\\nSend any message to chat with AI. Your conversation history is saved automatically.\\n\\n/new — start a new conversation\\n/history — view recent chats\\n/plans — view AI plans\\n/ask your question — ask directly\\n\\nFor support: ${supportHandle(s)}` : botText(lang, key, { support: supportHandle(s) }),
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
     reply_markup: rows.length ? { inline_keyboard: rows } : undefined,
