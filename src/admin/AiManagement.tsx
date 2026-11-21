@@ -18,6 +18,8 @@ export function AdminAiManagement() {
   const [key,setKey]=useState("");
   const [models,setModels]=useState("gpt-4o-mini");
   const [couponCode,setCouponCode]=useState("");
+  const [couponStart,setCouponStart]=useState("");
+  const [couponExpiry,setCouponExpiry]=useState("");
   const [discountType,setDiscountType]=useState("percent");
   const [discountValue,setDiscountValue]=useState("10");
   const [couponPlan,setCouponPlan]=useState("");
@@ -46,10 +48,10 @@ export function AdminAiManagement() {
   };
   const addCoupon=async()=>{
     if(!couponCode.trim()||Number(discountValue)<=0)return;
-    try{await api("/admin/ai/coupons",{method:"POST",body:{code:couponCode,discount_type:discountType,discount_value:Number(discountValue),plan_code:couponPlan||null,max_uses:maxUses?Number(maxUses):null}});setCouponCode("");await load();}
+    try{await api("/admin/ai/coupons",{method:"POST",body:{code:couponCode,discount_type:discountType,discount_value:Number(discountValue),plan_code:couponPlan||null,max_uses:maxUses?Number(maxUses):null,starts_at:couponStart?Math.floor(new Date(couponStart).getTime()/1000):null,expires_at:couponExpiry?Math.floor(new Date(couponExpiry).getTime()/1000):null}});setCouponCode("");setCouponStart("");setCouponExpiry("");await load();}
     catch(e:any){setError(e?.code||"Coupon could not be created")}
   };
-  const toggleProvider=async(p:Provider)=>{
+  const testProvider=async(id:number)=>{try{const r=await api<any>("/admin/ai/providers/"+id+"/test",{method:"POST",body:{}});alert(r.ok?"Provider connected · "+r.model:"Provider test failed");}catch(e:any){setError(e?.error||e?.code||"Provider test failed")}};\n  const toggleProvider=async(p:Provider)=>{
     try{await api("/admin/ai/providers/"+p.id,{method:"PUT",body:{enabled:!p.enabled}});await load();}
     catch(e:any){setError(e?.code||"Provider update failed")}
   };
@@ -74,7 +76,7 @@ export function AdminAiManagement() {
         {field("Models (comma or newline separated)",models,setModels,"gpt-4o-mini, gpt-4.1")}
         <button class="ai-admin-save" disabled={busy||!key.trim()} onClick={()=>void addProvider()}>{busy?"Saving…":"＋ Add provider"}</button>
       </div>
-      {providers.map(p=><article class="ai-admin-card"><h3>{p.name} <small>#{p.id}</small></h3><p>{p.base_url}</p><p>Key: {p.api_key} · Models: {(p.models??[]).join(", ")}</p><button onClick={()=>void toggleProvider(p)}>{p.enabled?"Disable":"Enable"}</button><button class="danger" onClick={()=>void deleteProvider(p.id)}>Delete</button></article>)}
+      {providers.map(p=><article class="ai-admin-card"><h3>{p.name} <small>#{p.id}</small></h3><p>{p.base_url}</p><p>Key: {p.api_key} · Models: {(p.models??[]).join(", ")}</p><button onClick={()=>void testProvider(p.id)}>Test connection</button><button onClick={()=>void toggleProvider(p)}>{p.enabled?"Disable":"Enable"}</button><button class="danger" onClick={()=>void deleteProvider(p.id)}>Delete</button></article>)}
       {!providers.length?<p class="ai-muted">No AI provider configured. Add at least one provider to enable chat replies.</p>:null}
     </section>
     <section class="ai-admin-section"><h2>AI plans & usage limits</h2><p class="ai-muted">Set monthly USD prices, daily message quotas and context/output limits.</p>
@@ -103,6 +105,8 @@ export function AdminAiManagement() {
         {field(discountType==="percent"?"Discount percent":"Discount amount (USD cents)",discountValue,setDiscountValue,"10")}
         <label class="ai-admin-field">Apply to plan<select value={couponPlan} onChange={e=>setCouponPlan((e.currentTarget as HTMLSelectElement).value)}><option value="">All plans</option>{plans.map(p=><option value={p.code}>{p.name}</option>)}</select></label>
         {field("Maximum redemptions (blank = unlimited)",maxUses,setMaxUses,"100")}
+        <label class="ai-admin-field">Starts at (optional)<input type="datetime-local" value={couponStart} onInput={e=>setCouponStart((e.currentTarget as HTMLInputElement).value)}/></label>
+        <label class="ai-admin-field">Expires at (optional)<input type="datetime-local" value={couponExpiry} onInput={e=>setCouponExpiry((e.currentTarget as HTMLInputElement).value)}/></label>
         <button class="ai-admin-save" onClick={()=>void addCoupon()}>＋ Create coupon</button>
       </div>
       {coupons.map(c=><article class="ai-admin-card"><h3>{c.code}</h3><p>{c.discount_type==="percent"?c.discount_value+"% off":"$"+(c.discount_value/100).toFixed(2)+" off"} · {c.plan_code||"All plans"} · Used {c.used_count}{c.max_uses?"/"+c.max_uses:""}{c.expires_at?" · Expires "+new Date(c.expires_at*1000).toLocaleDateString():""}</p><button class="danger" onClick={()=>void deleteCoupon(c.id)}>Delete coupon</button></article>)}
