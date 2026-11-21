@@ -58,7 +58,6 @@ export function AiChat() {
     const r = await api<{id:string}>("/ai/chats", { method:"POST", body:{} });
     setChats((list) => [{ id:r.id,title:"New chat",model:"",updated_at:Math.floor(Date.now()/1000) },...list]);
     setSelectedId(r.id);
-    navigate("/chat/" + encodeURIComponent(r.id));
     setMessages([]);
     setHistoryOpen(false);
     return r.id;
@@ -70,6 +69,7 @@ export function AiChat() {
     if (!models.length) { setError("No AI provider is configured yet. Ask the administrator to add an API provider."); return; }
     setBusy(true); setError(""); setPrompt("");
     try {
+      const isNew = !selectedId;
       const id = selectedId || await createChat();
       await api("/ai/chats/" + encodeURIComponent(id) + "/messages", {
         method:"POST",
@@ -83,6 +83,7 @@ export function AiChat() {
       setMessages(history.messages ?? []);
       setChats(chatList.items ?? []);
       setUsage(currentUsage);
+      if (isNew) navigate("/chat/" + encodeURIComponent(id));
     } catch (e:any) {
       setPrompt(content);
       setError(e?.code === "DAILY_LIMIT_REACHED" ? "You have reached today's message limit. Upgrade your plan or try again tomorrow." : e?.message || e?.code || "The AI request failed.");
