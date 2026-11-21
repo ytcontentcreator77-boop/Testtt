@@ -22,6 +22,9 @@ export function AdminAiManagement() {
   const [discountValue,setDiscountValue]=useState("10");
   const [couponPlan,setCouponPlan]=useState("");
   const [maxUses,setMaxUses]=useState("");
+  const [assignUser,setAssignUser]=useState("");
+  const [assignPlan,setAssignPlan]=useState("pro");
+  const [assignDays,setAssignDays]=useState("30");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
@@ -54,7 +57,7 @@ export function AdminAiManagement() {
     if(!confirm("Delete this AI provider?"))return;
     try{await api("/admin/ai/providers/"+id,{method:"DELETE"});await load()}catch(e:any){setError(e?.code||"Delete failed")}
   };
-  const deleteCoupon=async(id:number)=>{
+  const assign=async()=>{\n    const id=Number(assignUser);if(!Number.isSafeInteger(id)||id<=0)return;\n    try{await api("/admin/ai/users/"+id+"/plan",{method:"POST",body:{planCode:assignPlan,days:Number(assignDays)||30}});setError("");alert("AI plan assigned successfully.");}\n    catch(e:any){setError(e?.code||"Plan assignment failed")}\n  };\n  const deleteCoupon=async(id:number)=>{
     if(!confirm("Delete this AI plan coupon?"))return;
     try{await api("/admin/ai/coupons/"+id,{method:"DELETE"});await load()}catch(e:any){setError(e?.code||"Delete failed")}
   };
@@ -84,6 +87,14 @@ export function AdminAiManagement() {
         {field("Maximum output tokens",String(p.max_output_tokens),(v)=>setPlans(xs=>xs.map(x=>x.code===p.code?{...x,max_output_tokens:Number(v)||64}:x)))}
         <button class="ai-admin-save" onClick={()=>void savePlan(p)}>Save {p.name}</button>
       </article>)}
+    </section>
+    <section class="ai-admin-section"><h2>Assign a plan to a user</h2>
+      <div class="ai-admin-card ai-admin-grid">
+        {field("Telegram user ID",assignUser,setAssignUser,"123456789")}
+        <label class="ai-admin-field">Plan<select value={assignPlan} onChange={e=>setAssignPlan((e.currentTarget as HTMLSelectElement).value)}>{plans.map(p=><option value={p.code}>{p.name}</option>)}</select></label>
+        {field("Duration in days",assignDays,setAssignDays,"30")}
+        <button class="ai-admin-save" onClick={()=>void assign()}>Assign plan</button>
+      </div>
     </section>
     <section class="ai-admin-section"><h2>Plan coupons & discounts</h2>
       <div class="ai-admin-card ai-admin-grid">
