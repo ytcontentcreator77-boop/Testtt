@@ -17,7 +17,7 @@ import { Developer } from "./screens/Developer";
 import { HowToUse } from "./screens/HowToUse";
 import { AnnouncementPopup } from "./screens/AnnouncementPopup";
 import { Campaigns } from "./screens/Campaigns";
-import { KeyShop, KeyProduct, BuyKey, KeyDelivered, MyKeys, KeyWallet, KeyFunds, UpiAutoPayment } from "./screens/KeyStore";
+import { KeyProduct, BuyKey, KeyDelivered, MyKeys, KeyWallet, KeyFunds, UpiAutoPayment } from "./screens/KeyStore";
 import { AiChat, AiHistory, AiPlans } from "./screens/AiChat";
 import { LazyAdminRoutes, LazyPublicPages } from "./lazy";
 
