@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { platformName } from "../../shared/platforms";
 import type { OrderView } from "../../shared/types";
 import { api, ApiError, clearApiCache } from "../api";
-import { balanceStars, MAX_STARS_PER_PAYMENT, shownStars, starsCredit } from "../../shared/stars";
+import { MAX_STARS_PER_PAYMENT, shownStars, starsCredit } from "../../shared/stars";
 import type { MoneyTotals } from "../../shared/profit";
 import { dateTime, num, starsRate } from "../format";
 import { Icon, type IconName } from "../icons";
