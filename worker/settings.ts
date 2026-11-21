@@ -16,6 +16,12 @@ export const DEFAULTS = {
   only_timed: 1, // list only services that have a measured average delivery time
   low_balance: 5_000_000,
   support_username: "",
+  howto_title: "How to use this bot",
+  howto_description: "Watch the tutorial to learn how to use the Mini App.",
+  howto_youtube_url: "",
+  howto_tiktok_url: "",
+  howto_video_url: "",
+  howto_fallback_url: "",
   // Update channel: users must join it before using the app (bot must be an admin there). Off until a channel is set.
   channel_url: "",
   channel_id: "",
