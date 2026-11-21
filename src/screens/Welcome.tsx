@@ -52,8 +52,8 @@ export function Welcome() {
     >
       <ArtWelcome />
       <header class="lt lt-center rise" style="--d:140ms">
-        <h1 class="t-large welcome-title">{t("welcome.title")}</h1>
-        <p class="welcome-sub">{t("welcome.subtitle")}</p>
+        <h1 class="t-large welcome-title">Your AI assistant</h1>
+        <p class="welcome-sub">Ask anything, explore ideas, write, learn and build with AI.</p>
       </header>
       <div class="features" role="list">
         {FEATURES.map(([icon, plate, key], i) => (
@@ -61,7 +61,7 @@ export function Welcome() {
             <span class="tile md" style={`background:${plate}`} aria-hidden="true">
               <Icon name={icon} size={20} stroke={1.8} />
             </span>
-            <span>{t(key)}</span>
+            <span>{key}</span>
           </div>
         ))}
       </div>
