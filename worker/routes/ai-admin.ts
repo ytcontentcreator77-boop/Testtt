@@ -71,3 +71,18 @@ aiAdmin.delete("/ai/coupons/:id", async (c) => {
   await c.env.DB.prepare("DELETE FROM ai_plan_coupons WHERE id=?1").bind(Number(c.req.param("id"))).run();
   return c.json({ ok: true });
 });
+
+aiAdmin.post("/ai/users/:id/plan", async (c) => {
+  const userId = Number(c.req.param("id"));
+  const b = await c.req.json<{planCode?:string;days?:number}>().catch(()=>null);
+  if (!Number.isSafeInteger(userId) || userId <= 0 || !b?.planCode) return c.json({error:"INVALID_BODY",code:"INVALID_BODY"},400);
+  const plan = await c.env.DB.prepare("SELECT code FROM ai_plans WHERE code=?1 AND enabled=1").bind(b.planCode).first();
+  if (!plan) return c.json({error:"PLAN_NOT_FOUND",code:"PLAN_NOT_FOUND"},404);
+  const stamp = Math.floor(Date.now()/1000);
+  const days = Math.max(1,Math.min(3650,Math.floor(Number(b.days)||30)));
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active'").bind(userId),
+    c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) VALUES(?1,?2,'active',?3,?4,?3)").bind(userId,b.planCode,stamp,stamp+days*86400),
+  ]);
+  return c.json({ok:true,userId,planCode:b.planCode,endsAt:stamp+days*86400});
+});
