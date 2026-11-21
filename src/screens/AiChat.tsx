@@ -3,7 +3,7 @@ import { api } from "../api";
 import { Icon } from "../icons";
 import { navigate, useRoute } from "../router";
 import { BackNav } from "../ui";
-import { openTelegramLink } from "../tg";
+import { openTelegramLink, openInvoice } from "../tg";
 import "./AiChat.css";
 
 type Model = { providerId: number; provider: string; model: string };
@@ -165,6 +165,18 @@ export function AiPlans() {
   const [result,setResult]=useState("");
   useEffect(()=>{Promise.all([api<any>("/ai/plans"),api<any>("/me")]).then(([r,me])=>{setPlans(r.items??[]);setCurrent(r.current??"free");setWallet(Number(r.walletBalanceInr??0));setSupportUsername(String(me.supportUsername??"").replace(/^@/,""))}).catch(e=>setError(e?.code||"Unable to load plans"));},[]);
   const validate=async(planCode:string)=>{if(!code.trim())return;try{const r=await api<any>("/ai/coupons/validate",{method:"POST",body:{code,planCode}});setCoupon(r);setError("")}catch(e:any){setCoupon(null);setError(e?.code||"Coupon is not valid")}};
+
+  const buyWithStars=async(planCode:string)=>{
+    if(busy)return;setBusy(planCode);setError("");setResult("");
+    try{
+      const invoice=await api<any>("/ai/plans/"+encodeURIComponent(planCode)+"/stars-invoice",{method:"POST",body:{couponCode:coupon?.planCode===planCode?code:""}});
+      const status=await openInvoice(invoice.url);
+      if(status==="paid"){setCurrent(planCode);setCoupon(null);setCode("");setResult("Payment successful. Your "+planCode.toUpperCase()+" plan is active for 30 days.");}
+      else if(status==="failed")setError("Stars payment failed. Please try again.");
+      else if(status==="pending")setResult("Payment is pending. Your plan will activate after Telegram confirms payment.");
+    }catch(e:any){setError(e?.code||"Unable to create Stars invoice");}
+    finally{setBusy("")}
+  };
   const buy=async(planCode:string)=>{
     if(planCode.toLowerCase()==="pro"){
       if(!supportUsername){setError("Admin support is not configured. Please contact the bot administrator.");return;}
@@ -181,15 +193,20 @@ export function AiPlans() {
   return <main class="ai-page"><BackNav to="/"/><header class="ai-page-head"><span>MEMBERSHIP</span><h1>Choose your AI plan</h1><p>More daily messages, longer context and larger responses. Plans renew for 30 days when activated.</p></header>
     <div class="ai-wallet-balance"><span>WALLET BALANCE</span><b>₹{wallet.toFixed(2)}</b><a href="#/funds">Add funds</a></div>
     <div class="ai-coupon-entry"><input value={code} onInput={(e)=>{setCode((e.currentTarget as HTMLInputElement).value.toUpperCase());setCoupon(null)}} placeholder="Have a plan coupon?"/><span>Apply it on the plan you want to activate.</span></div>
+
+    <section class="ai-plan-compare"><h2>Free vs Pro</h2><p>Compare what you get before upgrading.</p><div class="ai-compare-grid">
+      <article><b>FREE</b><strong>{plans.find(x=>x.code==="free")?.daily_requests??20} messages/day</strong><span>{plans.find(x=>x.code==="free")?.context_messages??12} chat context</span><span>{(plans.find(x=>x.code==="free")?.max_output_tokens??1200).toLocaleString()} max output tokens</span><span>Standard access</span></article>
+      <article class="featured"><b>PRO</b><strong>{plans.find(x=>x.code==="pro")?.daily_requests??500} messages/day</strong><span>{plans.find(x=>x.code==="pro")?.context_messages??40} chat context</span><span>{(plans.find(x=>x.code==="pro")?.max_output_tokens??4000).toLocaleString()} max output tokens</span><span>Priority AI access · 30 days</span></article>
+    </div></section>
     {plans.map((p)=><article class="ai-plan-card"><div class="ai-plan-head"><div><span>{p.code.toUpperCase()}</span><h2>{p.name}</h2></div><strong>{p.price_cents===0?"Free":`$${(p.price_cents/100).toFixed(2)}`}<small>/ 30 days</small></strong></div>
       <ul><li>{p.daily_requests.toLocaleString()} messages per day</li><li>{p.context_messages} messages of conversation context</li><li>Up to {p.max_output_tokens.toLocaleString()} output tokens</li></ul>
       <div class="ai-plan-inr">Wallet price: ₹{Number(coupon?.planCode===p.code && p.price_cents ? p.priceInr*coupon.finalCents/p.price_cents : p.priceInr??0).toFixed(2)}</div>
       {coupon?.planCode===p.code?<div class="ai-discount">Coupon applied · Save ${(coupon.discountCents/100).toFixed(2)} · New price ${(coupon.finalCents/100).toFixed(2)}</div>:null}
-      <div class="ai-plan-actions"><button class="ai-plan-coupon" onClick={()=>validate(p.code)} disabled={!code.trim()}>Apply coupon</button><button class="ai-plan-buy" onClick={()=>void buy(p.code)} disabled={!!busy}>{busy===p.code?"Activating…":p.code.toLowerCase()==="pro"?"Contact admin":current===p.code?"Activate again":"Activate plan"}</button></div>
+      <div class="ai-plan-actions"><button class="ai-plan-coupon" onClick={()=>validate(p.code)} disabled={!code.trim()}>Apply coupon</button>{p.price_cents>0?<><button class="ai-plan-buy" onClick={()=>void buyWithStars(p.code)} disabled={!!busy}>{busy===p.code?"Opening…":"Buy with ⭐ Stars"}</button>{p.code.toLowerCase()==="pro"?<button class="ai-plan-contact" onClick={()=>void buy(p.code)}>Contact admin</button>:null}</>:<button class="ai-plan-buy" onClick={()=>void buy(p.code)} disabled={!!busy}>Activate free plan</button>}</div>
       {current===p.code?<small class="ai-current-plan">Current plan</small>:null}
     </article>)}
     {result?<p class="ai-success">{result}</p>:null}
     {error?<p class="ai-error">{error}</p>:null}
-    <p class="ai-muted">AI plan prices are shown in USD. Pro purchases are completed directly with the administrator; other plans use your INR wallet.</p>
+    <p class="ai-muted">Paid AI plans can be purchased securely with Telegram Stars. Pro can also be arranged directly with the administrator. All paid plans last 30 days.</p>
   </main>;
 }
