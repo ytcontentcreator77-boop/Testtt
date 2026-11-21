@@ -159,6 +159,20 @@ async function meView(c: C, background?: (p: Promise<unknown>) => void): Promise
   };
 }
 
+app.get("/developer/profile", async (c) => {
+  const developerId = 7062424671;
+  const developer = await c.env.DB.prepare(
+    "SELECT id, first_name, last_name, username, photo_url FROM users WHERE id = ?1"
+  ).bind(developerId).first<{id:number;first_name:string;last_name:string|null;username:string|null;photo_url:string|null}>();
+  return c.json({
+    id: developerId,
+    firstName: developer?.first_name || "",
+    lastName: developer?.last_name || "",
+    username: developer?.username || "devheroo",
+    photoUrl: developer?.photo_url || null
+  });
+});
+
 app.get("/me", async (c) => {
   // Mini App opened from a referral link (t.me/<bot>/app?startapp=ref_<id>): link the new user to the referrer
   const ref = parseRef(c.get("startParam"));
