@@ -848,8 +848,15 @@ admin.put("/key-products/:id", async (c) => {
 });
 admin.delete("/key-products/:id", async (c) => {
   const id=Number(c.req.param("id"));
-  await c.env.DB.batch([c.env.DB.prepare("DELETE FROM key_plans WHERE product_id=?1").bind(id), c.env.DB.prepare("DELETE FROM key_stock WHERE product_id=?1 AND used=0").bind(id), c.env.DB.prepare("UPDATE key_products SET enabled=0 WHERE id=?1").bind(id)]);
-  return c.json({ok:true});
+  if (!Number.isSafeInteger(id) || id < 1) return err(c,400,"INVALID_ID");
+  const product=await c.env.DB.prepare("SELECT id FROM key_products WHERE id=?1").bind(id).first();
+  if (!product) return err(c,404,"PRODUCT_NOT_FOUND");
+  // Archive only: retain every stock key and delivery/order record for audit and refunds.
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE key_products SET enabled=0 WHERE id=?1").bind(id),
+    c.env.DB.prepare("UPDATE key_plans SET enabled=0 WHERE product_id=?1").bind(id)
+  ]);
+  return c.json({ok:true,archived:true});
 });
 admin.get("/key-products/:id/plans", async (c) => {
   const {results}=await c.env.DB.prepare("SELECT pl.*,(SELECT COUNT(*) FROM key_stock ks WHERE ks.plan_id=pl.id AND ks.used=0) AS stock_count FROM key_plans pl WHERE pl.product_id=?1 ORDER BY pl.sort,pl.id").bind(Number(c.req.param("id"))).all();
@@ -868,7 +875,15 @@ admin.put("/key-plans/:id", async (c) => {
   if(keys.length) await c.env.DB.prepare(`UPDATE key_plans SET ${keys.map((k,i)=>`${k}=?${i+2}`).join(",")} WHERE id=?1`).bind(id,...keys.map(k=>k==="enabled"?(b[k]?1:0):b[k])).run();
   return c.json({ok:true});
 });
-admin.delete("/key-plans/:id", async (c)=>{ await c.env.DB.prepare("UPDATE key_plans SET enabled=0 WHERE id=?1").bind(Number(c.req.param("id"))).run(); return c.json({ok:true}); });
+admin.delete("/key-plans/:id", async (c)=>{
+  const id=Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id < 1) return err(c,400,"INVALID_ID");
+  const used=await c.env.DB.prepare("SELECT COUNT(*) AS n FROM key_stock WHERE plan_id=?1").bind(id).first<{n:number}>();
+  if (Number(used?.n??0)>0) return err(c,409,"PLAN_HAS_STOCK",{message:"Remove all keys for this plan before deleting it. Used keys are retained."});
+  const r=await c.env.DB.prepare("DELETE FROM key_plans WHERE id=?1").bind(id).run();
+  if (!r.meta.changes) return err(c,404,"PLAN_NOT_FOUND");
+  return c.json({ok:true,deleted:true});
+});
 admin.post("/key-products/:id/stock", async (c)=>{
   const b=await readBody<{plan_id:number;keys:string|string[];import_batch?:string}>(c); const productId=Number(c.req.param("id"));
   if(!b || !Number.isSafeInteger(Number(b.plan_id))) return err(c,400,"INVALID_BODY");
@@ -922,9 +937,25 @@ admin.post("/upload-file",async(c)=>{const b=await readBody<{product_id:number;f
 admin.get("/key-categories",async(c)=>{const {results}=await c.env.DB.prepare("SELECT * FROM key_categories ORDER BY sort,id").all();return c.json({items:results});});
 admin.post("/key-categories",async(c)=>{const b=await readBody<any>(c);if(!b?.name||!b?.slug)return err(c,400,"INVALID_CATEGORY");const r=await c.env.DB.prepare("INSERT INTO key_categories(slug,name,icon,image_url,enabled,sort,created_at) VALUES(?1,?2,?3,?4,1,?5,?6) RETURNING *").bind(String(b.slug).toLowerCase().replace(/[^a-z0-9_-]/g,"").slice(0,50),String(b.name).slice(0,100),String(b.icon??"🔑").slice(0,12),b.image_url??null,Number(b.sort)||0,Math.floor(Date.now()/1000)).first();return c.json({item:r},201);});
 admin.put("/key-categories/:id",async(c)=>{const b=await readBody<any>(c);if(!b)return err(c,400,"INVALID_BODY");const keys=["name","icon","image_url","enabled","sort"].filter(k=>b[k]!==undefined);if(keys.length)await c.env.DB.prepare(`UPDATE key_categories SET ${keys.map((k,i)=>`${k}=?${i+2}`).join(",")} WHERE id=?1`).bind(Number(c.req.param("id")),...keys.map(k=>k==="enabled"?(b[k]?1:0):b[k])).run();return c.json({ok:true});});
+admin.delete("/key-categories/:id",async(c)=>{
+ const id=Number(c.req.param("id")); if(!Number.isSafeInteger(id)||id<1)return err(c,400,"INVALID_ID");
+ const item=await c.env.DB.prepare("SELECT slug FROM key_categories WHERE id=?1").bind(id).first<{slug:string}>();
+ if(!item)return err(c,404,"CATEGORY_NOT_FOUND");
+ const used=await c.env.DB.prepare("SELECT COUNT(*) AS n FROM key_products WHERE category=?1").bind(item.slug).first<{n:number}>();
+ if(Number(used?.n??0)>0)return err(c,409,"CATEGORY_IN_USE",{message:"Move or delete its products before deleting this category."});
+ await c.env.DB.prepare("DELETE FROM key_categories WHERE id=?1").bind(id).run();return c.json({ok:true,deleted:true});
+});
 admin.get("/key-platforms",async(c)=>{const {results}=await c.env.DB.prepare("SELECT * FROM key_platforms ORDER BY sort,id").all();return c.json({items:results});});
 admin.post("/key-platforms",async(c)=>{const b=await readBody<any>(c);if(!b?.name||!b?.slug)return err(c,400,"INVALID_PLATFORM");const r=await c.env.DB.prepare("INSERT INTO key_platforms(slug,name,logo_url,enabled,sort,created_at) VALUES(?1,?2,?3,1,?4,?5) RETURNING *").bind(String(b.slug).toLowerCase().replace(/[^a-z0-9_-]/g,"").slice(0,50),String(b.name).slice(0,100),b.logo_url??null,Number(b.sort)||0,Math.floor(Date.now()/1000)).first();return c.json({item:r},201);});
 admin.put("/key-platforms/:id",async(c)=>{const b=await readBody<any>(c);if(!b)return err(c,400,"INVALID_BODY");const keys=["name","logo_url","enabled","sort"].filter(k=>b[k]!==undefined);if(keys.length)await c.env.DB.prepare(`UPDATE key_platforms SET ${keys.map((k,i)=>`${k}=?${i+2}`).join(",")} WHERE id=?1`).bind(Number(c.req.param("id")),...keys.map(k=>k==="enabled"?(b[k]?1:0):b[k])).run();return c.json({ok:true});});
+admin.delete("/key-platforms/:id",async(c)=>{
+ const id=Number(c.req.param("id")); if(!Number.isSafeInteger(id)||id<1)return err(c,400,"INVALID_ID");
+ const item=await c.env.DB.prepare("SELECT slug FROM key_platforms WHERE id=?1").bind(id).first<{slug:string}>();
+ if(!item)return err(c,404,"PLATFORM_NOT_FOUND");
+ const used=await c.env.DB.prepare("SELECT COUNT(*) AS n FROM key_products WHERE platform=?1").bind(item.slug).first<{n:number}>();
+ if(Number(used?.n??0)>0)return err(c,409,"PLATFORM_IN_USE",{message:"Move or delete its products before deleting this platform."});
+ await c.env.DB.prepare("DELETE FROM key_platforms WHERE id=?1").bind(id).run();return c.json({ok:true,deleted:true});
+});
 
 admin.get("/key-apis",async(c)=>{const {results}=await c.env.DB.prepare("SELECT id,name,url,mode,android_required,enabled,updated_at,CASE WHEN api_key!='' THEN 1 ELSE 0 END AS configured FROM key_apis ORDER BY created_at DESC").all();return c.json({items:results,active:c.get("settings").active_key_api_id});});
 admin.post("/key-apis",async(c)=>{const b=await readBody<any>(c);if(!b?.id||!b?.name||!b?.url||!b?.api_key||!/^https:\/\//.test(b.url))return err(c,400,"INVALID_API");const now=Math.floor(Date.now()/1000);await c.env.DB.prepare("INSERT INTO key_apis(id,name,url,api_key,master_key,mode,android_required,enabled,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,1,?8,?8)").bind(String(b.id).slice(0,60),String(b.name).slice(0,100),String(b.url).slice(0,300),String(b.api_key).slice(0,500),b.master_key??null,b.mode??"reseller_v1",b.android_required?1:0,now).run();if(!c.get("settings").active_key_api_id)await setSettings(c.env,{active_key_api_id:String(b.id)});return c.json({ok:true});});
