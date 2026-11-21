@@ -1126,3 +1126,34 @@ a.btn { text-decoration: none; color: var(--on-brand); }
 /* Keep announcement editor text readable in the admin panel. */
 .announcement-editor input:not([type=checkbox]),.announcement-editor textarea{color:var(--fg)!important;background:var(--bg)!important;caret-color:var(--accent)!important;-webkit-text-fill-color:var(--fg)!important}
 .announcement-editor textarea::placeholder,.announcement-editor input::placeholder{color:var(--muted)!important;opacity:1}
+
+
+/* Campaign cards, home live alert and admin review */
+.campaign-live-banner{display:flex;align-items:center;gap:12px;width:100%;margin:14px 0;padding:14px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:17px;background:color-mix(in srgb,var(--accent) 9%,var(--card));color:var(--text);text-align:left}
+.campaign-live-banner>span:nth-child(2){display:grid;gap:4px;flex:1;min-width:0}
+.campaign-live-banner b{font-size:13px}.campaign-live-banner small{font-size:10px;color:var(--muted)}
+.campaign-live-banner strong{font-size:11px;color:var(--accent);white-space:nowrap}
+.campaign-live-dot{width:10px;height:10px;border-radius:50%;background:#20b879;box-shadow:0 0 0 5px rgba(32,184,121,.12);flex:0 0 auto}
+.campaign-intro{display:grid;gap:5px;padding:16px;border-radius:18px;background:var(--card);border:1px solid var(--line)}
+.campaign-intro b{font-size:15px}.campaign-intro span{font-size:12px;color:var(--muted)}
+.campaign-card{display:grid;gap:12px;padding:16px;margin:10px 0;border:1px solid var(--line);border-radius:18px;background:var(--card);color:var(--text)}
+.campaign-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.campaign-card-top>b{font-size:15px;color:var(--accent)}
+.campaign-type{font-size:9px;letter-spacing:.1em;font-weight:900;color:var(--muted)}
+.campaign-card h3{margin:0;font-size:16px}.campaign-card p{margin:0;color:var(--muted);font-size:12px;line-height:1.55;white-space:pre-wrap}
+.campaign-channels{display:grid;gap:7px}
+.campaign-channels button{padding:11px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--accent);text-align:left;font-size:12px;font-weight:750}
+.campaign-action{width:100%;min-height:46px;padding:12px;border:0;border-radius:13px;background:var(--accent);color:white;font-weight:850}
+.campaign-action:disabled{opacity:.5}
+.campaign-status{padding:11px;border-radius:12px;background:color-mix(in srgb,#20b879 12%,var(--card));color:var(--text);font-size:12px;font-weight:750}
+.campaign-empty{padding:24px;border:1px dashed var(--line);border-radius:16px;text-align:center;color:var(--muted);font-size:12px}
+.campaign-upload{display:grid;gap:8px;padding:13px;border:1px dashed var(--line);border-radius:13px;font-size:12px;font-weight:750}
+.campaign-upload input{max-width:100%;font-size:11px;color:var(--text)}
+.campaign-admin-form{display:grid;gap:13px}
+.campaign-admin-form label{display:grid;gap:7px;font-size:12px;font-weight:750;color:var(--text)}
+.campaign-admin-form input,.campaign-admin-form textarea,.campaign-admin-form select{width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);font:inherit;outline:none}
+.campaign-admin-form textarea{resize:vertical}
+.campaign-admin-form small,.campaign-admin-note{color:var(--muted);font-size:10px;line-height:1.5}
+.campaign-admin-actions{display:flex;gap:8px;flex-wrap:wrap}
+.campaign-admin-actions button{padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:var(--bg);color:var(--text);font-size:11px;font-weight:750}
+.campaign-proof{display:block;width:100%;max-height:420px;object-fit:contain;border-radius:12px;background:var(--bg)}
