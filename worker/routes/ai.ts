@@ -21,7 +21,7 @@ async function activePlan(c: any): Promise<PlanRow> {
   ).bind(userId, now()).first() as PlanRow | null;
   if (sub) return sub;
   const free = await c.env.DB.prepare("SELECT code,name,daily_requests,context_messages,max_output_tokens,duration_days FROM ai_plans WHERE code='free' AND enabled=1").first() as PlanRow | null;
-  return free ?? { code: "free", name: "Free", daily_requests: 20, context_messages: 12, max_output_tokens: 1200 };
+  return free ?? { code: "free", name: "Free", daily_requests: 20, context_messages: 12, max_output_tokens: 1200, duration_days: 0 };
 }
 
 async function usage(c: any, plan: PlanRow) {
