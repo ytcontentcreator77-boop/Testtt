@@ -17,6 +17,7 @@ import { AdminCurrencies, AdminIcons, AdminImport, AdminMessages, AdminPaymentMe
 import { balStars, money, starsText, usdStars } from "./fmt";
 import { LEGEND, MoneyCells, MoneyTotalsBar, orderCells, rateCells, type Report } from "./Money";
 import { AdminsSection, type Owners } from "./Access";
+import { AdminAnnouncements } from "./Announcements";
 import {
   BackNav,
   BottomButtons,
@@ -69,6 +70,7 @@ export function AdminRoutes({ parts, query }: { parts: string[]; query: URLSearc
   if (a === "import" && b) return <AdminImport providerId={b} />;
   if (a === "currencies") return <AdminCurrencies />;
   if (a === "payment-methods") return <AdminPaymentMethods />;
+  if (a === "announcements") return <AdminAnnouncements />;
   if (a === "messages") return <AdminMessages />;
   if (a === "icons") return <AdminIcons />;
   return <AdminHome />;
@@ -313,6 +315,7 @@ const MANAGE: [string, IconName, string, string][] = [
   ["Branding", "spark", "var(--pink)", "/admin/branding"],
   ["Settings", "plug", "var(--lavender)", "/admin/settings"],
   ["Payment methods", "receipt", "var(--lavender)", "/admin/payment-methods"],
+  ["Announcements", "bell", "var(--pink)", "/admin/announcements"],
   ["Bot messages", "chat", "var(--sky)", "/admin/messages"],
 ];
 
