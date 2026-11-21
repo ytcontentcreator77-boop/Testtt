@@ -16,7 +16,7 @@ async function activePlan(c: any): Promise<PlanRow> {
     `SELECT p.code,p.name,p.daily_requests,p.context_messages,p.max_output_tokens
      FROM ai_user_plans s JOIN ai_plans p ON p.code=s.plan_code
      WHERE s.user_id=?1 AND s.status='active' AND (s.ends_at IS NULL OR s.ends_at>?2) AND p.enabled=1
-     ORDER BY s.starts_at DESC LIMIT 1`,
+     ORDER BY s.starts_at DESC,s.id DESC LIMIT 1`,
   ).bind(userId, now()).first<PlanRow>();
   if (sub) return sub;
   const free = await c.env.DB.prepare("SELECT code,name,daily_requests,context_messages,max_output_tokens FROM ai_plans WHERE code='free' AND enabled=1").first<PlanRow>();
@@ -65,7 +65,8 @@ ai.post("/plans/:code/purchase", async (c) => {
   const rate = Number(c.get("settings").inr_per_usd || 90);
   const amountInr = Math.ceil((finalCents/100)*rate*100)/100;
   const userId = c.get("user").id;
-  const stamp = now();
+  const latestLedger = await c.env.DB.prepare("SELECT MAX(created_at) AS last FROM inr_ledger WHERE user_id=?1").bind(userId).first<{last:number|null}>();
+  const stamp = Math.max(now(),Number(latestLedger?.last??0)+1);
   const statements:any[] = [];
   statements.push(c.env.DB.prepare(`UPDATE users SET balance_inr=balance_inr-?1
     WHERE id=?2 AND balance_inr>=?1
@@ -76,8 +77,9 @@ ai.post("/plans/:code/purchase", async (c) => {
     .bind(amountInr,userId,coupon?1:0,coupon?.id??0,stamp,code));
   if (coupon) statements.push(c.env.DB.prepare("UPDATE ai_plan_coupons SET used_count=used_count+1 WHERE id=?1 AND changes()=1").bind(coupon.id));
   statements.push(c.env.DB.prepare("INSERT INTO inr_ledger(user_id,delta_inr,kind,ref,note,created_at) SELECT ?1,?2,'ai_plan',?3,?4,?5 WHERE changes()=1").bind(userId,-amountInr,plan.id,"AI plan: "+plan.name,stamp));
-  statements.push(c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE changes()=1").bind(userId,code,stamp,stamp+30*86400));
-  if (coupon) statements.push(c.env.DB.prepare("INSERT INTO ai_coupon_redemptions(coupon_id,user_id,plan_code,discount_cents,redeemed_at) SELECT ?1,?2,?3,?4,?5 WHERE changes()=1").bind(coupon.id,userId,code,discount,stamp));
+  statements.push(c.env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active' AND EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?1 AND kind='ai_plan' AND created_at=?2 AND ref=?3)").bind(userId,stamp,plan.id));
+  statements.push(c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) SELECT ?1,?2,'active',?3,?4,?3 WHERE EXISTS(SELECT 1 FROM inr_ledger WHERE user_id=?1 AND kind='ai_plan' AND created_at=?3 AND ref=?5)").bind(userId,code,stamp,stamp+30*86400,plan.id));
+  if (coupon) statements.push(c.env.DB.prepare("INSERT INTO ai_coupon_redemptions(coupon_id,user_id,plan_code,discount_cents,redeemed_at) SELECT ?1,?2,?3,?4,?5 WHERE EXISTS(SELECT 1 FROM ai_user_plans WHERE user_id=?2 AND plan_code=?3 AND created_at=?5)").bind(coupon.id,userId,code,discount,stamp));
   const results = await c.env.DB.batch(statements);
   const walletUpdate = results[coupon?1:0];
   if (!walletUpdate?.meta.changes) return c.json({ error: coupon ? "COUPON_INVALID_OR_EXPIRED" : "INSUFFICIENT_WALLET_BALANCE", code: coupon ? "COUPON_INVALID_OR_EXPIRED" : "INSUFFICIENT_WALLET_BALANCE", amountInr }, coupon ? 400 : 402);
