@@ -160,9 +160,27 @@ async function meView(c: C, background?: (p: Promise<unknown>) => void): Promise
 }
 
 app.get("/announcements/current", async (c) => {
-  const userId = c.get("user").id;
+  const u = c.get("user");
+  const userId = u.id;
   const row = await c.env.DB.prepare("SELECT a.id,a.title,a.description,a.image_url,a.button_text,a.button_enabled,a.button_url FROM announcements a WHERE a.active=1 AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.announcement_id=a.id AND d.user_id=?1) ORDER BY a.id DESC LIMIT 1").bind(userId).first<any>();
-  return c.json({ announcement: row ?? null });
+  if (!row) return c.json({ announcement: null });
+  const [stats, keys] = await Promise.all([
+    c.env.DB.prepare("SELECT COUNT(*) AS orders FROM orders WHERE user_id=?1").bind(userId).first<any>(),
+    c.env.DB.prepare("SELECT delivered_key,product_name,expires_at FROM orders WHERE user_id=?1 AND delivered_key IS NOT NULL ORDER BY id DESC LIMIT 3").bind(userId).all<any>(),
+  ]);
+  const k = keys.results;
+  const s = c.get("settings");
+  return c.json({ announcement: row, vars: {
+    name: [u.first_name,u.last_name].filter(Boolean).join(" ") || "there",
+    username: u.username ? "@"+u.username : "",
+    balance: "₹"+Number(u.balance_inr??0).toFixed(2),
+    totalkeys: String(k.length),
+    key_1: k[0]?.delivered_key ?? "", key_2: k[1]?.delivered_key ?? "", key_3: k[2]?.delivered_key ?? "",
+    product: k[0]?.product_name ?? "",
+    expiry: k[0]?.expires_at ? new Date(Number(k[0].expires_at)*1000).toLocaleDateString("en-GB") : "",
+    joined: u.created_at ? new Date(Number(u.created_at)*1000).toLocaleDateString("en-GB") : "",
+    orders: String(stats?.orders ?? 0), brand: s.brand_name, support: s.support_username ? "@"+s.support_username : "Support",
+  } });
 });
 app.post("/announcements/:id/dismiss", async (c) => {
   const id = Number(c.req.param("id"));
