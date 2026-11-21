@@ -49,11 +49,11 @@ aiAdmin.post("/ai/plans", async (c) => {
   const b = await c.req.json<any>().catch(()=>null);
   const code = String(b?.code??"").trim().toLowerCase();
   const name = String(b?.name??"").trim();
-  const price = Number(b?.price_cents??0), daily = Number(b?.daily_requests??20), context = Number(b?.context_messages??12), output = Number(b?.max_output_tokens??1200);
-  if (!/^[a-z0-9_-]{2,32}$/.test(code) || !name || ![price,daily,context,output].every(Number.isFinite) || price<0 || daily<1 || context<2 || output<64) return c.json({error:"INVALID_PLAN",code:"INVALID_PLAN"},400);
+  const price = Number(b?.price_cents??0), daily = Number(b?.daily_requests??20), context = Number(b?.context_messages??12), output = Number(b?.max_output_tokens??1200), duration = Number(b?.duration_days??30);
+  if (!/^[a-z0-9_-]{2,32}$/.test(code) || !name || ![price,daily,context,output,duration].every(Number.isFinite) || price<0 || daily<1 || context<2 || output<64 || duration<0 || duration>3650) return c.json({error:"INVALID_PLAN",code:"INVALID_PLAN"},400);
   try {
-    await c.env.DB.prepare("INSERT INTO ai_plans(code,name,price_cents,currency,daily_requests,context_messages,max_output_tokens,enabled,sort,updated_at) VALUES(?1,?2,?3,'USD',?4,?5,?6,1,?7,?8)")
-      .bind(code,name.slice(0,80),Math.floor(price),Math.floor(daily),Math.floor(context),Math.floor(output),Number(b.sort)||100,Math.floor(Date.now()/1000)).run();
+    await c.env.DB.prepare("INSERT INTO ai_plans(code,name,price_cents,currency,daily_requests,context_messages,max_output_tokens,duration_days,enabled,sort,updated_at) VALUES(?1,?2,?3,'USD',?4,?5,?6,?7,1,?8,?9)")
+      .bind(code,name.slice(0,80),Math.floor(price),Math.floor(daily),Math.floor(context),Math.floor(output),Math.floor(duration),Number(b.sort)||100,Math.floor(Date.now()/1000)).run();
     return c.json({ok:true,code});
   } catch { return c.json({error:"PLAN_CODE_EXISTS",code:"PLAN_CODE_EXISTS"},409); }
 });
@@ -64,10 +64,10 @@ aiAdmin.put("/ai/plans/:code", async (c) => {
   const current = await c.env.DB.prepare("SELECT * FROM ai_plans WHERE code=?1").bind(code).first<any>();
   if (!current) return c.json({ error: "NOT_FOUND", code: "NOT_FOUND" }, 404);
   const price = Number(b.price_cents ?? current.price_cents), daily = Number(b.daily_requests ?? current.daily_requests);
-  const context = Number(b.context_messages ?? current.context_messages), output = Number(b.max_output_tokens ?? current.max_output_tokens);
-  if (![price,daily,context,output].every(Number.isFinite) || price < 0 || daily < 1 || context < 2 || output < 64) return c.json({ error: "INVALID_LIMITS", code: "INVALID_LIMITS" }, 400);
-  await c.env.DB.prepare("UPDATE ai_plans SET name=?1,price_cents=?2,daily_requests=?3,context_messages=?4,max_output_tokens=?5,enabled=?6,sort=?7,updated_at=?8 WHERE code=?9")
-    .bind(String(b.name ?? current.name).slice(0,80),Math.round(price),Math.floor(daily),Math.floor(context),Math.floor(output),b.enabled===undefined?current.enabled:+!!b.enabled,Number(b.sort??current.sort),Math.floor(Date.now()/1000),code).run();
+  const context = Number(b.context_messages ?? current.context_messages), output = Number(b.max_output_tokens ?? current.max_output_tokens), duration = Number(b.duration_days ?? current.duration_days ?? 30);
+  if (![price,daily,context,output,duration].every(Number.isFinite) || price < 0 || daily < 1 || context < 2 || output < 64 || duration < 0 || duration > 3650) return c.json({ error: "INVALID_LIMITS", code: "INVALID_LIMITS" }, 400);
+  await c.env.DB.prepare("UPDATE ai_plans SET name=?1,price_cents=?2,daily_requests=?3,context_messages=?4,max_output_tokens=?5,duration_days=?6,enabled=?7,sort=?8,updated_at=?9 WHERE code=?10")
+    .bind(String(b.name ?? current.name).slice(0,80),Math.round(price),Math.floor(daily),Math.floor(context),Math.floor(output),Math.floor(duration),b.enabled===undefined?current.enabled:+!!b.enabled,Number(b.sort??current.sort),Math.floor(Date.now()/1000),code).run();
   return c.json({ ok: true });
 });
 aiAdmin.get("/ai/coupons", async (c) => c.json({ items: (await c.env.DB.prepare("SELECT * FROM ai_plan_coupons ORDER BY id DESC").all()).results }));
@@ -90,17 +90,17 @@ aiAdmin.post("/ai/users/:id/plan", async (c) => {
   const userId = Number(c.req.param("id"));
   const b = await c.req.json<{planCode?:string;days?:number}>().catch(()=>null);
   if (!Number.isSafeInteger(userId) || userId <= 0 || !b?.planCode) return c.json({error:"INVALID_BODY",code:"INVALID_BODY"},400);
-  const plan = await c.env.DB.prepare("SELECT code FROM ai_plans WHERE code=?1 AND enabled=1").bind(b.planCode).first();
+  const plan = await c.env.DB.prepare("SELECT code,duration_days FROM ai_plans WHERE code=?1 AND enabled=1").bind(b.planCode).first<{code:string;duration_days:number}>();
   const user = await c.env.DB.prepare("SELECT id FROM users WHERE id=?1").bind(userId).first();
   if (!user) return c.json({error:"USER_NOT_FOUND",code:"USER_NOT_FOUND"},404);
   if (!plan) return c.json({error:"PLAN_NOT_FOUND",code:"PLAN_NOT_FOUND"},404);
   const stamp = Math.floor(Date.now()/1000);
-  const days = Math.max(1,Math.min(3650,Math.floor(Number(b.days)||30)));
+  const days = Math.max(0,Math.min(3650,Math.floor(Number(b.days ?? plan.duration_days) || 0)));
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE ai_user_plans SET status='replaced' WHERE user_id=?1 AND status='active'").bind(userId),
-    c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) VALUES(?1,?2,'active',?3,?4,?3)").bind(userId,b.planCode,stamp,stamp+days*86400),
+    c.env.DB.prepare("INSERT INTO ai_user_plans(user_id,plan_code,status,starts_at,ends_at,created_at) VALUES(?1,?2,'active',?3,?4,?3)").bind(userId,b.planCode,stamp,days===0?null:stamp+days*86400),
   ]);
-  return c.json({ok:true,userId,planCode:b.planCode,endsAt:stamp+days*86400});
+  return c.json({ok:true,userId,planCode:b.planCode,endsAt:days===0?null:stamp+days*86400});
 });
 
 aiAdmin.post("/ai/providers/:id/test", async (c) => {
