@@ -165,7 +165,7 @@ app.get("/announcements/current", async (c) => {
   const row = await c.env.DB.prepare("SELECT a.id,a.title,a.description,a.image_url,a.button_text,a.button_enabled,a.button_url FROM announcements a WHERE a.active=1 AND a.id=(SELECT MAX(id) FROM announcements WHERE active=1) AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.announcement_id=a.id AND d.user_id=?1) LIMIT 1").bind(userId).first<any>();
   if (!row) return c.json({ announcement: null });
   const [stats, keys] = await Promise.all([
-    c.env.DB.prepare("SELECT COUNT(*) AS orders FROM orders WHERE user_id=?1").bind(userId).first<any>(),
+    c.env.DB.prepare("SELECT COUNT(*) AS orders,SUM(CASE WHEN delivered_key IS NOT NULL THEN 1 ELSE 0 END) AS totalkeys FROM orders WHERE user_id=?1").bind(userId).first<any>(),
     c.env.DB.prepare("SELECT delivered_key,product_name,expires_at FROM orders WHERE user_id=?1 AND delivered_key IS NOT NULL ORDER BY id DESC LIMIT 3").bind(userId).all<any>(),
   ]);
   const k = keys.results;
@@ -174,7 +174,7 @@ app.get("/announcements/current", async (c) => {
     name: [u.first_name,u.last_name].filter(Boolean).join(" ") || "there",
     username: u.username ? "@"+u.username : "",
     balance: "₹"+Number(u.balance_inr??0).toFixed(2),
-    totalkeys: String(k.length),
+    totalkeys: String(stats?.totalkeys ?? 0),
     key_1: k[0]?.delivered_key ?? "", key_2: k[1]?.delivered_key ?? "", key_3: k[2]?.delivered_key ?? "",
     product: k[0]?.product_name ?? "",
     expiry: k[0]?.expires_at ? new Date(Number(k[0].expires_at)*1000).toLocaleDateString("en-GB") : "",
