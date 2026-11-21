@@ -138,7 +138,7 @@ export function Profile() {
       ) : null}
 
       <List>
-        <Row icon="wallet" plate="var(--lime)" title="Wallet balance" value={`₹${Number(me.balanceInr).toFixed(2)}`} href="/key-wallet" />
+        <Row icon="chat" plate="var(--sky)" title="Conversation history" href="/history" />\n        <Row icon="star" plate="var(--lime)" title="AI plans & limits" href="/plans" />
       </List>
 
       {me.channelUrl || brand.websiteUrl ? (
